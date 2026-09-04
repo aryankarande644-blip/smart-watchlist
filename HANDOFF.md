@@ -308,7 +308,17 @@ provider matching this shape). Two providers exist:
 - `demoProvider.js` — explicit, labeled simulated data (drifting prices
   seeded to real Indian large-caps), selected via `MARKET_DATA_PROVIDER=demo`
 - `realProvider.js` — yahoo-finance2 backed (`.NS` suffix), default via
-  `MARKET_DATA_PROVIDER=real`; live-verified against real Yahoo data
+  `MARKET_DATA_PROVIDER=real`; live-verified against real Yahoo data.
+  Automated fallback for cloud IPs: Yahoo's cookie/crumb gate refuses
+  datacenter addresses (Render) — `No set-cookie header present in Yahoo's
+  response` — even with a real browser UA. The provider detects that class
+  of failure and switches (sticky, per process) to direct `fetch` against
+  Yahoo's crumb-free `v8/finance/chart` endpoint for both quotes
+  (`meta.regularMarketPrice`) and history; symbol-miss classification is
+  preserved (Yahoo's 404 "No data found" -> `422`). Verified live on the
+  deployed Render backend: `HDFCBANK` -> ₹712.10, `RELIANCE` -> ₹1,322
+  (real NSE prices), bogus -> `422`. See `DEPLOYMENT.md` Phase 2 for the
+  full debrief.
 
 ### Deployment topology, decided by what the poller requires
 The poller is a long-running background loop — this rules out serverless
@@ -500,6 +510,13 @@ validation (`422 unknown_symbol`) and live snapshots.
 generates plausible prices by design), so the `422` validation rejection
 is real-provider-only — don't read its absence as a bug while validating
 the deployment. During Phase 2, POST a bogus symbol and expect `422`.
+
+**Phase 2 — DONE (2026-09-04).** Both phases are live on Render + Neon +
+Vercel; no provider code changes beyond the crumb-gate fallback described
+in Section 5 (provided as code, no env change). Verified on the deployed
+backend: `/health` db ok, `HDFCBANK` -> ₹712.10, `RELIANCE` -> ₹1,322
+(real NSE via Yahoo quote and history), bogus -> `422 unknown_symbol`.
+Full debrief: `DEPLOYMENT.md` Phase 2.
 
 Topology, following Section 6 exactly:
 - Neon or Supabase -> run `migrations/001_init.sql` against it -> get `DATABASE_URL`

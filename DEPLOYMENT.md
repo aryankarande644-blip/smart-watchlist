@@ -89,9 +89,25 @@ curl -s https://smart-watchlist.vercel.app/              # 200, Watchlist app
 ## Phase 2 (only after acceptance)
 - Render -> Environment: `MARKET_DATA_PROVIDER=real`, redeploy.
 - Verify in the browser: add a bogus symbol -> `422 unknown_symbol`; add TCS ->
-  immediate real snapshot. Note `.nvmrc` pins Node 22 (yahoo-finance2
+  immediate real snapshot. `.nvmrc` pins Node 22 (yahoo-finance2
   requirement); the demo phase never loads that library, which is why Node 22
   only becomes load-bearing for this second phase.
+
+**Phase 2 RESULTS (verified live on Render + Vercel, 2026-09-04):**
+- `/health` -> `db: ok`, circuit `closed`.
+- Real NSE prices flowing: `HDFCBANK` -> ₹712.10, `RELIANCE` -> ₹1,322
+  (matches NSE), `baselineTriggered`, live snapshots.
+- Bogus symbol -> `422 unknown_symbol`.
+- **Gotcha found during Phase 2 (already fixed):** Yahoo's cookie/crumb gate
+  refuses datacenter/cloud IPs (Render) — `No set-cookie header present in
+  Yahoo's response` — even with a real browser User-Agent. The provider now
+  detects that and switches (sticky, per process) to a direct `fetch`
+  against the crumb-free `v8/finance/chart` endpoint for both quotes and
+  history (see `backend/src/marketData/realProvider.js`). No env change
+  needed for the fix; it shipped as code (`46d0ced`).
+- `YF_QUERY_HOST` (default `query2`) and `YF_DIRECT_HOST` (default
+  `query1`) tune which Yahoo host each path uses; the direct path only kicks
+  in after a crumb failure is observed.
 
 ## Env var cheat-sheet
 
