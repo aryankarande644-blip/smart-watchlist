@@ -7,6 +7,26 @@ function assertTrue(name, condition, detail) {
   else { failed++; console.log(`FAIL  ${name}  (${JSON.stringify(detail)})`); }
 }
 
+// ---- global.fetch stubbing helpers (for the direct-fetch fallback tests) ----
+const originalFetch = global.fetch;
+let stubbedUrls = [];
+function stubFetch(respondFn) {
+  stubbedUrls = [];
+  global.fetch = async (url, opts) => {
+    stubbedUrls.push({ url: String(url), opts });
+    const payload = await respondFn(String(url), opts);
+    return {
+      ok: true,
+      status: 200,
+      json: async () => payload,
+    };
+  };
+}
+function restoreFetch() {
+  global.fetch = originalFetch;
+  stubbedUrls = [];
+}
+
 // Fake client shaped exactly like yahoo-finance2's real response, per its
 // actual (installed, inspected) type definitions — not guessed. Historical is
 // mocked as the `chart` method ({ meta, quotes }), which is what
@@ -17,12 +37,18 @@ function makeFakeYahooClient({ quoteResponse, chartResponse, throwOnQuote, throw
     calls: [],
     async quote(symbol) {
       this.calls.push(['quote', symbol]);
-      if (throwOnQuote) throw new Error('simulated Yahoo failure');
+      if (throwOnQuote) {
+        if (throwOnQuote instanceof Error) throw throwOnQuote;
+        throw new Error('simulated Yahoo failure');
+      }
       return quoteResponse;
     },
     async chart(symbol, opts) {
       this.calls.push(['chart', symbol, opts]);
-      if (throwOnChart) throw new Error('simulated Yahoo failure');
+      if (throwOnChart) {
+        if (throwOnChart instanceof Error) throw throwOnChart;
+        throw new Error('simulated Yahoo failure');
+      }
       return chartResponse;
     },
   };
@@ -130,6 +156,78 @@ async function run() {
     const spanDays = (optsUsed.period2 - optsUsed.period1) / (24 * 60 * 60 * 1000);
     assertTrue('7. Requested date range is wider than 20 calendar days (weekend/holiday buffer)', spanDays > 20, spanDays);
   }
+
+  // ---- Test 8: crumb-gated quote falls back to direct v8-chart fetch ----
+  {
+    stubFetch(() => ({
+      chart: {
+        result: [{
+          meta: { regularMarketPrice: 2304, regularMarketTime: 1757000000 },
+          indicators: { quote: [{ volume: [5888088, null] }] },
+        }],
+      },
+    }));
+    const fake = makeFakeYahooClient({ throwOnQuote: new Error("No set-cookie header present in Yahoo's response") });
+    const provider = createRealProvider(fake);
+    const result = await provider.fetchQuote('TCS');
+    assertTrue('8a. Crumb failure triggers direct-fetch fallback', stubbedUrls.length === 1, stubbedUrls);
+    assertTrue('8b. Direct URL targets v8 chart with .NS suffix', stubbedUrls[0].url.includes('/v8/finance/chart/TCS.NS'), stubbedUrls[0].url);
+    assertTrue('8c. price read from chart meta.regularMarketPrice', result.price === 2304, result);
+    assertTrue('8d. volume best-effort from indicator rows', result.volume === 5888088, result);
+  }
+
+  // ---- Test 9: direct-fetch mode is sticky (no repeated doomed crumb calls) ----
+  {
+    stubFetch(() => ({ chart: { result: [{ meta: { regularMarketPrice: 99 }, indicators: {} }] } }));
+    const fake = makeFakeYahooClient({ throwOnQuote: new Error("No set-cookie header present in Yahoo's response") });
+    const provider = createRealProvider(fake);
+    await provider.fetchQuote('INFY');
+    await provider.fetchQuote('INFY'); // second call must NOT re-attempt the crumb path
+    assertTrue('9a. Second quote goes straight to direct fetch (client quote not re-called)', fake.calls.length === 1, fake.calls.length);
+    assertTrue('9b. Two direct fetches happened total', stubbedUrls.length === 2, stubbedUrls.length);
+  }
+
+  // ---- Test 10: crumb-gated history falls back to direct v8-chart fetch ----
+  {
+    const now = Math.floor(Date.now() / 1000);
+    stubFetch(() => ({
+      chart: {
+        result: [{
+          timestamp: [now - 2 * 86400, now - 86400, now],
+          indicators: { quote: [{ close: [100, 101, null], volume: [1000, 1100, null] }] },
+        }],
+      },
+    }));
+    const fake = makeFakeYahooClient({ throwOnChart: new Error("No set-cookie header present in Yahoo's response") });
+    const provider = createRealProvider(fake);
+    const result = await provider.fetchHistorical('INFY', 20);
+    assertTrue('10a. History falls back to direct fetch', stubbedUrls.length === 1, stubbedUrls);
+    assertTrue('10b. Direct history strips the null-close in-progress candle', result.length === 2, result);
+    assertTrue('10c. oldest-first ordering preserved', result[0].close === 100 && result[1].close === 101, result);
+  }
+
+// ---- Test 11: direct path genuinely-invalid symbol still throws "No usable quote data" ----
+  {
+    stubFetch(() => new Promise((resolve) => resolve({ ok: false, status: 404, json: async () => ({ chart: { result: null, error: { code: 'Not Found', description: 'No data found, symbol may be delisted' } } }) })));
+    const fake = makeFakeYahooClient({ throwOnQuote: new Error("No set-cookie header present in Yahoo's response") });
+    const provider = createRealProvider(fake);
+    let threw = false;
+    let msg = '';
+    try { await provider.fetchQuote('BOGUSXYZ'); } catch (err) { threw = true; msg = err.message; }
+    assertTrue('11. Invalid symbol over direct path throws (classified as symbol-miss)',
+      threw && /no data found|no usable quote data/i.test(msg), msg);
+  }
+
+  // ---- Test 12: non-crumb upstream failures still propagate untouched ----
+  {
+    const fake = makeFakeYahooClient({ throwOnQuote: new Error('HTTPERROR 500: boom') });
+    const provider = createRealProvider(fake);
+    let msg = '';
+    try { await provider.fetchQuote('X'); } catch (err) { msg = err.message; }
+    assertTrue('12. Non-crumb failure (HTTP 500) propagates, no silent direct-fetch switch', msg === 'HTTPERROR 500: boom', msg);
+  }
+
+  restoreFetch();
 
   console.log(`\n${passed} passed, ${failed} failed`);
   process.exit(failed > 0 ? 1 : 0);
