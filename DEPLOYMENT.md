@@ -109,6 +109,21 @@ curl -s https://smart-watchlist.vercel.app/              # 200, Watchlist app
   `query1`) tune which Yahoo host each path uses; the direct path only kicks
   in after a crumb failure is observed.
 
+## Final runbook step — keep-alive monitor (REMAINING; everything else done)
+
+The only open item: keep the free Render instance awake. It sleeps after
+~15 min with no HTTP traffic (the poller is a background loop, which the
+platform doesn't count as activity), so point a free uptime monitor
+(UptimeRobot, Cronitor, etc.) at
+
+```
+https://watchlist-backend-mt3i.onrender.com/health
+```
+
+every 5 min. Confirm it stays up by checking that `/health` reports
+`lastSuccessfulPollAt` advancing on weekdays after 09:15 IST (it stays
+`null` while the market is closed — that is normal, not a failure).
+
 ## Env var cheat-sheet
 
 | Var (Render)             | Phase 1 | Phase 2  | Notes |
