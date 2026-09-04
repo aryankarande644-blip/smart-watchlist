@@ -17,6 +17,44 @@ class CircuitOpenError extends Error {
   }
 }
 
+// Distinguishes "Yahoo/the upstream answered and rejected the symbol" (-> 422
+// unknown_symbol) from "we never got a usable answer at all" (-> 502
+// upstream_error). Without this, a network/rate-limit failure is misreported
+// as an invalid symbol, which is a very different problem to debug.
+const UPSTREAM_FAILURE_PATTERNS = [
+  /fetch failed/i,
+  /ECONN/i,
+  /ETIMEDOUT/i,
+  /EAI_AGAIN/i,
+  /EADDR/i,
+  /ENOTFOUND/i,
+  /timeout/i,
+  /HTTPERROR/i,
+  /http error/i,
+  /\b429\b/,
+  /\b401\b/,
+  /\b409\b/,
+  /\b5\d\d\b/,
+];
+
+// Signatures that mean Yahoo DID answer (delisted/never-existed/bad symbol)
+// rather than being unreachable — these stay valid 422 "unknown symbol" cases,
+// even though the current watchlist flow reports them as validation failures.
+const KNOWN_SYMBOL_MISS_PATTERNS = [
+  /no data found/i,
+  /no usable quote data/i,
+  /no usable \(completed\) historical/i,
+  /no historical data/i,
+];
+
+function isUpstreamError(err) {
+  if (!err) return false;
+  if (err.name === 'CircuitOpenError') return true;
+  const msg = String(err.message || '');
+  if (KNOWN_SYMBOL_MISS_PATTERNS.some((p) => p.test(msg))) return false;
+  return UPSTREAM_FAILURE_PATTERNS.some((p) => p.test(msg));
+}
+
 function createMarketDataClient(provider, opts = {}) {
   const maxRetries = opts.maxRetries ?? 3;
   const baseDelayMs = opts.baseDelayMs ?? 100;
@@ -85,4 +123,4 @@ function createMarketDataClient(provider, opts = {}) {
   };
 }
 
-module.exports = { createMarketDataClient, CircuitOpenError };
+module.exports = { createMarketDataClient, CircuitOpenError, isUpstreamError };

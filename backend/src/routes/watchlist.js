@@ -3,6 +3,7 @@ const express = require('express');
 const repo = require('../db/repository');
 const { computeDiff } = require('../diffEngine');
 const { computeBaselineForSymbol } = require('../baseline/computeBaseline');
+const { isUpstreamError } = require('../marketData/client');
 
 function createWatchlistRouter({ marketDataClient }) {
 const router = express.Router();
@@ -130,6 +131,12 @@ router.post('/watchlist', async (req, res, next) => {
       try {
         freshQuote = await marketDataClient.fetchQuote(symbol);
       } catch (err) {
+        // Keep the two failure modes honest: an invalid symbol vs an
+        // unreachable market source are different problems (422 vs 502).
+        if (isUpstreamError(err)) {
+          console.error(JSON.stringify({ event: 'quote_upstream_failure', symbol, message: err.message }));
+          return errorResponse(res, 502, 'upstream_error', 'market data source is currently unreachable');
+        }
         return errorResponse(res, 422, 'unknown_symbol', `could not resolve symbol "${symbol}"`);
       }
     }

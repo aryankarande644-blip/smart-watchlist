@@ -1,5 +1,5 @@
 // src/test/marketDataClient.test.js
-const { createMarketDataClient, CircuitOpenError } = require('../marketData/client');
+const { createMarketDataClient, CircuitOpenError, isUpstreamError } = require('../marketData/client');
 
 let passed = 0;
 let failed = 0;
@@ -107,6 +107,27 @@ async function run() {
     const result = await client.fetchQuote('X');
     assertTrue('4c. After cooldown, trial call reaches provider and recovers', result.price === 100, result);
     assertTrue('4d. Circuit is closed again after a successful trial', client.getCircuitState() === 'closed', client.getCircuitState());
+  }
+
+  // ---- Test 5: isUpstreamError separates "symbol invalid" from "source down" ----
+  {
+    // Yahoo answered, rejected the symbol -> NOT upstream
+    assertTrue('5a. "No data found" (Yahoo rejected symbol) is NOT upstream',
+      isUpstreamError(new Error('HTTPERROR 404: No data found, symbol may be delisted')) === false);
+    assertTrue('5b. Real-provider unusable-quote marker is NOT upstream',
+      isUpstreamError(new Error('No usable quote data for BOGUS')) === false);
+
+    // We never got a usable answer -> IS upstream
+    assertTrue('5c. HTTP 429 rate limit is upstream',
+      isUpstreamError(new Error('HTTPERROR 429: Unable to determine request rate limits')) === true);
+    assertTrue('5d. HTTP 401 is upstream',
+      isUpstreamError(new Error('HTTPERROR 401: Unauthorized')) === true);
+    assertTrue('5e. Connection reset is upstream',
+      isUpstreamError(Object.assign(new Error('connect ECONNREFUSED 162.159.152.4:443'), { name: 'Error' })) === true);
+    assertTrue('5f. Node fetch network failure is upstream',
+      isUpstreamError(new TypeError('fetch failed')) === true);
+    assertTrue('5g. CircuitOpenError is upstream',
+      isUpstreamError(new CircuitOpenError('circuit open — upstream API assumed down')) === true);
   }
 
   console.log(`\n${passed} passed, ${failed} failed`);

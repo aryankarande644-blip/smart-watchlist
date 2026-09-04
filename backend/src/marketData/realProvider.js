@@ -5,26 +5,45 @@
 // required, MIT licensed, actively maintained — verified on npm before
 // using: `npm view yahoo-finance2 version`).
 //
-// NOTE ON TESTING: this sandbox has no network path to finance.yahoo.com
-// (not in the allowed-domains list), so the actual HTTP calls could not be
-// live-tested here. What COULD be verified without network access — and
-// WAS verified, see realProvider.test.js — is the mapping/adapter logic:
-// correctly appending the .NS suffix, correctly reading Yahoo's actual
-// field names (regularMarketPrice, regularMarketVolume, etc., confirmed
-// against the installed package's real type definitions, not guessed),
-// and correctly slicing/shaping historical data to our interface. That is
-// the part most likely to silently break; the HTTP plumbing itself is
-// yahoo-finance2's problem, not ours.
+// MAPPING/ADAPTER LOGIC is covered by realProvider.test.js; the full HTTP
+// path was additionally LIVE-VERIFIED against real Yahoo data (quotes + 20
+// completed candles) during the build.
 //
-// Uses the v3 class API per the package's own bundled usage guidance
+// DEPLOYMENT NOTE (found live, Phase 2): the stock yahoo-finance2 default
+// User-Agent — `Mozilla/5.0 (compatible; yahoo-finance2/x.y.z)` — is a
+// "compatible" UA that Yahoo frequently rejects from cloud/datacenter IPs
+// (Render, AWS, etc.) with 429/401, while the same code worked fine from a
+// residential IP. Sending a real browser UA fixes it. `YF_QUERY_HOST`
+// (env, default query2) optionally switches the query endpoint, e.g. to
+// `query1.finance.yahoo.com`, if one host is more permissive than the other.
+//
+// Uses the v3 class API per the package's bundled usage guidance
 // (node_modules/yahoo-finance2/skills/yahoo-finance2/SKILL.md) — the old
 // v1/v2 singleton pattern is explicitly deprecated.
 
 const YahooFinance = require('yahoo-finance2').default;
 
+// A real, current desktop Chrome UA. yahoo-finance2's built-in default is a
+// "compatible" UA that Yahoo tends to block — see note above.
+const BROWSER_USER_AGENT =
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36';
+
+function defaultYahooFinanceClient() {
+  return new YahooFinance({
+    YF_QUERY_HOST: process.env.YF_QUERY_HOST || 'query2.finance.yahoo.com',
+    fetchOptions: {
+      headers: {
+        'User-Agent': BROWSER_USER_AGENT,
+        'Accept': 'application/json',
+        'Accept-Language': 'en-US,en;q=0.9',
+      },
+    },
+  });
+}
+
 // Factory, not a bare singleton — allows a fake/mock client to be injected
 // for testing the mapping logic without a real network call.
-function createRealProvider(yahooFinanceClient = new YahooFinance()) {
+function createRealProvider(yahooFinanceClient = defaultYahooFinanceClient()) {
   // Indian NSE tickers need a .NS suffix on Yahoo Finance (e.g. RELIANCE.NS).
   // BSE would use .BO — NSE is the more liquid/primary exchange for most
   // large-caps, so it's the default here; a real product might let a user
