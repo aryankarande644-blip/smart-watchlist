@@ -1,0 +1,43 @@
+# Render Blueprint — backend web service.
+#
+# Single-click import:  New +  Blueprint  ->  this repo root (render.yaml).
+# After import, two edits BEFORE first successful deploy:
+#   1. DATABASE_URL — create a Postgres instance (New + Postgres) and paste its
+#      Internal Database URL here, or override the env var in the dashboard.
+#   2. FRONTEND_ORIGIN — set to the deployed frontend URL.
+#      Except Vercel app URLs are only known AFTER the frontend deploys, so in
+#      Phase 1 you can point this at anything; flip it once the frontend is up.
+#
+# Phase 1 ships MARKET_DATA_PROVIDER=demo on purpose (see HANDOFF.md Section 10
+# #3 for the two-phase rollout). The provider is chosen at boot from this env —
+# flipping to real later is a dashboard env change + redeploy, no code change.
+
+services:
+  - type: web
+    name: watchlist-backend
+    runtime: node
+    rootDir: backend
+    plan: free
+    numInstances: 1
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: MARKET_DATA_PROVIDER
+        value: demo
+      - key: SESSION_COOKIE_SAMESITE
+        value: none
+      # Cross-site deploy (frontend on vercel.app): SameSite=None + Secure is
+      # required for the session cookie to round-trip from a different site.
+      # The server.js origin-check middleware keeps this safe.
+      - key: FRONTEND_ORIGIN
+        value: https://CHANGE-ME.vercel.app
+      - key: DATABASE_URL
+        value: postgres://CHANGE_ME
+      - key: SESSION_SECRET
+        generateValue: true
+      - key: POLL_INTERVAL_MS
+        value: 30000

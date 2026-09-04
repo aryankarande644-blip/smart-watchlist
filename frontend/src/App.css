@@ -1,0 +1,251 @@
+/* src/App.css */
+
+.page {
+  max-width: 640px;
+  margin: 0 auto;
+  padding: 3rem 1.5rem 6rem;
+}
+
+.masthead {
+  margin-bottom: 2.5rem;
+}
+
+.masthead h1 {
+  font-family: var(--font-display);
+  font-weight: 500;
+  font-size: 2.75rem;
+  margin: 0 0 0.5rem;
+  letter-spacing: -0.01em;
+}
+
+.masthead__disclaimer {
+  color: var(--muted);
+  font-size: 0.8125rem;
+  margin: 0;
+  max-width: 46ch;
+}
+
+.banner {
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--hairline);
+  border-radius: 4px;
+  margin-bottom: 1.5rem;
+  font-size: 0.875rem;
+}
+
+.banner--error {
+  color: var(--down);
+  border-color: var(--down);
+}
+
+.state {
+  padding: 3rem 0;
+  color: var(--muted);
+  font-size: 0.9375rem;
+}
+
+.state--empty p {
+  margin: 0 0 0.35rem;
+  color: var(--paper);
+  font-size: 1.125rem;
+}
+
+.state__hint {
+  color: var(--muted) !important;
+  font-size: 0.9375rem !important;
+}
+
+.ledger {
+  border-top: 1px solid var(--hairline);
+}
+
+.row {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  align-items: center;
+  gap: 1rem;
+  padding: 1rem 0;
+  border-bottom: 1px solid var(--hairline);
+}
+
+.row--featured {
+  padding: 1.5rem 0;
+}
+
+.row--featured .row__symbol {
+  font-family: var(--font-display);
+  font-size: 1.75rem;
+  font-weight: 500;
+}
+
+.row--featured .row__price {
+  font-size: 1.5rem;
+}
+
+.row--meaningful {
+  border-left: 3px solid var(--gold);
+  padding-left: 1rem;
+  margin-left: -1rem;
+}
+
+.row--pending {
+  opacity: 0.6;
+}
+
+.row__main {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  min-width: 0;
+}
+
+.row__symbol-line {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.row__symbol {
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+.row__note {
+  color: var(--muted);
+  font-size: 0.8125rem;
+}
+
+.row__change {
+  font-size: 0.8125rem;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.row__change.up {
+  color: var(--up);
+}
+
+.row__change.down {
+  color: var(--down);
+}
+
+.row__price-block {
+  text-align: right;
+}
+
+.row__price {
+  font-variant-numeric: tabular-nums;
+  font-weight: 500;
+}
+
+.row__price.up {
+  color: var(--up);
+}
+
+.row__price.down {
+  color: var(--down);
+}
+
+.row__actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.row__ack,
+.row__remove {
+  background: transparent;
+  border: 1px solid var(--hairline);
+  color: var(--muted);
+  padding: 0.4rem 0.7rem;
+  border-radius: 4px;
+  font-size: 0.8125rem;
+  cursor: pointer;
+}
+
+.row__ack {
+  border-color: var(--gold);
+  color: var(--gold);
+}
+
+.row__ack:hover:not(:disabled),
+.row__remove:hover:not(:disabled) {
+  background: var(--ink-raised);
+}
+
+.row__ack:disabled,
+.row__remove:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.badge {
+  font-size: 0.6875rem;
+  padding: 0.15rem 0.45rem;
+  border-radius: 3px;
+  border: 1px solid var(--hairline);
+  color: var(--muted);
+}
+
+.badge--stale {
+  color: var(--down);
+  border-color: var(--down);
+}
+
+.badge--closed {
+  color: var(--muted);
+}
+
+.add-form {
+  display: flex;
+  gap: 0.6rem;
+  margin-top: 2rem;
+  position: relative;
+}
+
+.add-form input {
+  flex: 1;
+  background: var(--ink-raised);
+  border: 1px solid var(--hairline);
+  color: var(--paper);
+  padding: 0.65rem 0.85rem;
+  border-radius: 4px;
+  font-size: 0.9375rem;
+}
+
+.add-form input::placeholder {
+  color: var(--muted);
+}
+
+.add-form button {
+  background: var(--gold);
+  color: var(--ink);
+  border: none;
+  padding: 0.65rem 1.2rem;
+  border-radius: 4px;
+  font-weight: 600;
+  font-size: 0.9375rem;
+  cursor: pointer;
+}
+
+.add-form button:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.add-form__error {
+  position: absolute;
+  bottom: -1.4rem;
+  left: 0;
+  color: var(--down);
+  font-size: 0.8125rem;
+}
+
+@media (max-width: 480px) {
+  .row {
+    grid-template-columns: 1fr auto;
+    grid-template-areas: 'main price' 'main actions';
+  }
+  .row__main { grid-area: main; }
+  .row__price-block { grid-area: price; }
+  .row__actions { grid-area: actions; justify-self: end; }
+}
