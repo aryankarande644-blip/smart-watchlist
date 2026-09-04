@@ -1,9 +1,11 @@
 # Deployment Runbook — Smart Market Watchlist (Phase 1: demo mode)
 
-Topology: **Render** hosts the backend + Postgres. **Vercel** hosts the React
-frontend (static build). Phase 1 runs `MARKET_DATA_PROVIDER=demo` so the
-deployment plumbing is proven with zero external variables; Phase 2 flips one
-env var to `real` (see HANDOFF Section 10 #3).
+Topology: **Render** hosts the backend. Postgres is an **existing Neon
+database** (schema already migrated — use its connection string as
+`DATABASE_URL`; no new DB to create). **Vercel** hosts the React frontend
+(static build). Phase 1 runs `MARKET_DATA_PROVIDER=demo` so the deployment
+plumbing is proven with zero external variables; Phase 2 flips one env var to
+`real` (see HANDOFF Section 10 #3).
 
 Ownership: these are the exact commands/configs to run. The repo is already
 `git init`-ed and committed locally as `main`; you create the remotes.
@@ -27,9 +29,11 @@ git push -u origin main
 
 ## 2. Backend on Render (two passes for URL wiring)
 
-**2a. Create Postgres**
-- Render dashboard: New + Postgres. Free instance is fine.
-- Copy its **Internal Database URL** (stays inside Render's network), for 2d.
+**2a. Use the existing Neon database — no new Postgres**
+The schema is already migrated on Neon. Grab that database's **connection
+string** (either the pooled or direct variant works — the backend uses the
+standard pg Pool, no LISTEN/NOTIFY) and set it as `DATABASE_URL` in 2c.
+Do NOT create a Postgres on Render.
 
 **2b. Import blueprint**
 - Render dashboard: New + Blueprint, pick the repo.
@@ -37,7 +41,7 @@ git push -u origin main
   (rootDir `backend`, health check `/health`, 1 instance).
 
 **2c. Fix env vars before the first deploy** (Service -> Environment)
-- `DATABASE_URL` <- the Internal Database URL from 2a (ignore the render.yaml
+- `DATABASE_URL` <- your Neon connection string from 2a (ignore the render.yaml
   placeholder).
 - `FRONTEND_ORIGIN` <- left as the placeholder for now (Vercel URL not known
   yet; see step 4 for the flip).
@@ -94,7 +98,7 @@ curl -s https://smart-watchlist.vercel.app/              # 200, Watchlist app
 | Var (Render)             | Phase 1 | Phase 2  | Notes |
 |--------------------------|---------|----------|-------|
 | `MARKET_DATA_PROVIDER`   | `demo`  | `real`   | chosen at boot; flip + redeploy |
-| `DATABASE_URL`           | Render Postgres Internal URL | same | |
+| `DATABASE_URL`           | Neon connection string | same | existing migrated schema |
 | `FRONTEND_ORIGIN`        | Vercel URL | same | exact match, scheme matters |
 | `SESSION_SECRET`         | generated | same | keep stable post-launch |
 | `SESSION_COOKIE_SAMESITE`| `none`   | `none`   | cross-site cookie; origin-check keeps it safe |

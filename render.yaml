@@ -2,8 +2,9 @@
 #
 # Single-click import:  New +  Blueprint  ->  this repo root (render.yaml).
 # After import, two edits BEFORE first successful deploy:
-#   1. DATABASE_URL — create a Postgres instance (New + Postgres) and paste its
-#      Internal Database URL here, or override the env var in the dashboard.
+#   1. DATABASE_URL — override in the dashboard with the EXISTING Neon
+#      connection string (schema is already migrated there; do NOT create a
+#      new Postgres on Render).
 #   2. FRONTEND_ORIGIN — set to the deployed frontend URL.
 #      Except Vercel app URLs are only known AFTER the frontend deploys, so in
 #      Phase 1 you can point this at anything; flip it once the frontend is up.
