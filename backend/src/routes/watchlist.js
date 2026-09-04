@@ -4,6 +4,7 @@ const repo = require('../db/repository');
 const { computeDiff } = require('../diffEngine');
 const { computeBaselineForSymbol } = require('../baseline/computeBaseline');
 const { isUpstreamError } = require('../marketData/client');
+const { recordQuoteError, clearQuoteError } = require('../diagnostics');
 
 function createWatchlistRouter({ marketDataClient }) {
 const router = express.Router();
@@ -130,11 +131,15 @@ router.post('/watchlist', async (req, res, next) => {
     if (!existingBaseline) {
       try {
         freshQuote = await marketDataClient.fetchQuote(symbol);
+        clearQuoteError();
       } catch (err) {
+        // ALWAYS record the raw failure for diagnosis (surfaced via /health),
+        // regardless of how we classify it for the HTTP response.
+        const detail = recordQuoteError(err);
+        console.error(JSON.stringify({ event: 'quote_validation_failure', symbol, name: detail.name, message: detail.message }));
         // Keep the two failure modes honest: an invalid symbol vs an
         // unreachable market source are different problems (422 vs 502).
         if (isUpstreamError(err)) {
-          console.error(JSON.stringify({ event: 'quote_upstream_failure', symbol, message: err.message }));
           return errorResponse(res, 502, 'upstream_error', 'market data source is currently unreachable');
         }
         return errorResponse(res, 422, 'unknown_symbol', `could not resolve symbol "${symbol}"`);

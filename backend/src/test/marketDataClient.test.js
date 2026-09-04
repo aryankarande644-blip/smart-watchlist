@@ -128,6 +128,12 @@ async function run() {
       isUpstreamError(new TypeError('fetch failed')) === true);
     assertTrue('5g. CircuitOpenError is upstream',
       isUpstreamError(new CircuitOpenError('circuit open — upstream API assumed down')) === true);
+    assertTrue('5h. Yahoo HTTPError with 429 body is upstream',
+      isUpstreamError(Object.assign(new Error('HTTPError: Yahoo data not raised for the query response'), { name: 'HTTPError' })) === true);
+    assertTrue('5i. Yahoo BadRequestError (HTTP 400) is upstream',
+      isUpstreamError(Object.assign(new Error('BadRequestError: bad request'), { name: 'BadRequestError' })) === true);
+    assertTrue('5j. Yahoo HTTPError that explicitly says No data found stays a symbol-miss',
+      isUpstreamError(Object.assign(new Error('HTTPError: No data found, symbol may be delisted'), { name: 'HTTPError' })) === false);
   }
 
   console.log(`\n${passed} passed, ${failed} failed`);

@@ -1,6 +1,7 @@
 // src/routes/health.js
 const express = require('express');
 const pool = require('../db/pool');
+const { getDiagnostics } = require('../diagnostics');
 
 function createHealthRouter({ poller, marketDataClient }) {
   const router = express.Router();
@@ -16,6 +17,7 @@ function createHealthRouter({ poller, marketDataClient }) {
 
     const pollerStatus = poller.getStatus();
     const circuitState = marketDataClient.getCircuitState();
+    const { lastQuoteError } = getDiagnostics();
 
     const healthy = dbOk && circuitState !== 'open';
 
@@ -27,6 +29,7 @@ function createHealthRouter({ poller, marketDataClient }) {
         isCycleRunning: pollerStatus.isCycleRunning,
       },
       marketDataCircuit: circuitState,
+      lastQuoteError,
     });
   });
 

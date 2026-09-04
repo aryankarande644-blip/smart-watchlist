@@ -49,7 +49,16 @@ const KNOWN_SYMBOL_MISS_PATTERNS = [
 
 function isUpstreamError(err) {
   if (!err) return false;
-  if (err.name === 'CircuitOpenError') return true;
+  const name = err.name || '';
+  // Yahoo's lib throws by class name for HTTP-level problems (HTTP 400, any
+  // non-ok status, schema/validation surprises). "No data found" resolves
+  // those genuinely-unknown-symbol cases first, so a real-built-in-name error
+  // only counts as upstream when Yahoo did NOT clearly say "no such symbol".
+  if (name === 'BadRequestError' || name === 'HTTPError' || name === 'FailedYahooValidationError') {
+    if (KNOWN_SYMBOL_MISS_PATTERNS.some((p) => p.test(String(err.message || '')))) return false;
+    return true;
+  }
+  if (name === 'CircuitOpenError') return true;
   const msg = String(err.message || '');
   if (KNOWN_SYMBOL_MISS_PATTERNS.some((p) => p.test(msg))) return false;
   return UPSTREAM_FAILURE_PATTERNS.some((p) => p.test(msg));
