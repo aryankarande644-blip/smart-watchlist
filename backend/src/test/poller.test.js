@@ -29,12 +29,21 @@ function makeMixedClient() {
 
 const silentLogger = { log: () => {}, error: () => {} };
 
+// Accounts need email + password_hash now (migration 002); poll tests only
+// use the user id, so any dummy values suffice.
+const DUMMY_HASH = '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy';
+let userSeq = 0;
+async function makeUser() {
+  userSeq++;
+  return repo.createUser(`poller-test-${userSeq}-${Date.now()}@test.local`, DUMMY_HASH);
+}
+
 async function run() {
   await resetDb();
 
   // ---- Test 1: one permanently-failing symbol does not block the others ----
   {
-    const user = await repo.createUser();
+    const user = await makeUser();
     for (const symbol of ['GOODSTOCK1', 'BADSTOCK', 'GOODSTOCK2']) {
       await repo.ensureBaselineExists(symbol);
       await repo.addToWatchlist(user.id, symbol);
@@ -65,7 +74,7 @@ async function run() {
   // ---- Test 1d: a symbol that HAD data, then starts failing, keeps its
   // last-known-good price and flips is_stale (the other real failure path) ----
   {
-    const user = await repo.createUser();
+    const user = await makeUser();
     await repo.ensureBaselineExists('WASGOOD');
     await repo.addToWatchlist(user.id, 'WASGOOD');
     // Simulate one successful poll in the past.
@@ -84,7 +93,7 @@ async function run() {
 
   // ---- Test 1e: market-closed branch, also forced deterministically ----
   {
-    const user = await repo.createUser();
+    const user = await makeUser();
     await repo.ensureBaselineExists('CLOSEDTEST');
     await repo.addToWatchlist(user.id, 'CLOSEDTEST');
     await repo.upsertSnapshot('CLOSEDTEST', { price: 500, volume: 1000, isStale: false, marketClosed: false });

@@ -3,12 +3,16 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import { api } from './api';
 import { WatchlistRow } from './WatchlistRow';
 import { AddSymbolForm } from './AddSymbolForm';
+import { AuthPage } from './AuthPage';
 
 // Configurable via VITE_POLL_INTERVAL_MS (ms); default 20s. Env-driven so
 // the interval can be tuned without a code change.
 const POLL_INTERVAL_MS = Number(import.meta.env.VITE_POLL_INTERVAL_MS) || 20000;
 
 export function App() {
+  // authed: null = checking (first load), true = signed in, false = the
+  // server rejected our session (or we logged out) -> show the auth page.
+  const [authed, setAuthed] = useState(null);
   const [items, setItems] = useState(null); // null = not loaded yet
   const [connectionError, setConnectionError] = useState(false);
   const [busySymbol, setBusySymbol] = useState(null);
@@ -19,9 +23,15 @@ export function App() {
       const data = await api.getWatchlist();
       setItems(data.items);
       setConnectionError(false);
+      setAuthed(true);
     } catch (err) {
-      // Distinct from a stale DATA badge — this means we can't reach the
-      // backend at all, a different failure layer entirely.
+      // A rejected session (401) flips us to the auth page; anything else
+      // is a connectivity problem, distinct from a stale DATA badge.
+      if (err.status === 401) {
+        setItems(null);
+        setAuthed(false);
+        return;
+      }
       setConnectionError(true);
     }
   }, []);
@@ -36,6 +46,11 @@ export function App() {
       if (pollTimer.current) clearInterval(pollTimer.current);
     }
 
+    // Only poll while signed in — there's nothing to fetch on the auth page.
+    if (authed !== true) {
+      clear();
+      return () => clear();
+    }
     // Pause polling when the tab is backgrounded — don't burn API quota
     // or battery for a tab nobody is looking at.
     function handleVisibility() {
@@ -53,7 +68,21 @@ export function App() {
       clear();
       document.removeEventListener('visibilitychange', handleVisibility);
     };
-  }, [refresh]);
+  }, [refresh, authed]);
+
+  async function handleAuthenticated() {
+    await refresh();
+  }
+
+  async function handleLogout() {
+    try {
+      await api.logout(); // clears the cookie server-side too (session revoked)
+    } finally {
+      setItems(null);
+      setConnectionError(false);
+      setAuthed(false);
+    }
+  }
 
   async function handleAdd(symbol) {
     await api.addSymbol(symbol);
@@ -82,10 +111,19 @@ export function App() {
     }
   }
 
+  if (authed === false) {
+    return <AuthPage onAuthenticated={handleAuthenticated} />;
+  }
+
   return (
     <div className="page">
       <header className="masthead">
-        <h1>Watchlist</h1>
+        <div className="masthead__row">
+          <h1>Watchlist</h1>
+          <button type="button" className="masthead__logout" onClick={handleLogout}>
+            Log out
+          </button>
+        </div>
         <p className="masthead__disclaimer">
           Data for demo purposes, may be delayed — not for financial decisions.
         </p>
@@ -96,7 +134,7 @@ export function App() {
       )}
 
       <main>
-        {items === null && !connectionError && (
+        {authed === null && items === null && !connectionError && (
           <div className="state state--loading">Loading your watchlist…</div>
         )}
 

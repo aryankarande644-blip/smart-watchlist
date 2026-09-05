@@ -9,6 +9,16 @@ const { recordQuoteError, clearQuoteError } = require('../diagnostics');
 function createWatchlistRouter({ marketDataClient }) {
 const router = express.Router();
 
+// Everything under /watchlist requires a real session. No cookie, invalid
+// signature, or a cookie whose user row is gone => 401, never a silently
+// minted account (the anonymous-session model was superseded by /auth).
+router.use((req, res, next) => {
+  if (!req.userId) {
+    return res.status(401).json({ error: { code: 'not_authenticated', message: 'sign in required' } });
+  }
+  next();
+});
+
 // Uniform error envelope across every endpoint — one code path on the frontend.
 function errorResponse(res, status, code, message) {
   return res.status(status).json({ error: { code, message } });

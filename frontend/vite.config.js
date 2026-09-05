@@ -8,6 +8,7 @@ export default defineConfig({
     proxy: {
       // Local dev convenience only — prod build uses VITE_API_BASE_URL directly.
       '/watchlist': 'http://localhost:3001',
+      '/auth': 'http://localhost:3001',
       '/health': 'http://localhost:3001',
     },
   },

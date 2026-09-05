@@ -36,4 +36,9 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ snapshotToken }),
     }),
+  signup: (email, password) =>
+    request('/auth/signup', { method: 'POST', body: JSON.stringify({ email, password }) }),
+  login: (email, password) =>
+    request('/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) }),
+  logout: () => request('/auth/logout', { method: 'POST' }),
 };

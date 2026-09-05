@@ -3,6 +3,14 @@
 // against the real local Postgres instance. This is the highest-confidence
 // test in the suite: if this passes, the actual wiring works, not just
 // the individual pieces in isolation.
+//
+// Since migration 002 (real email/password accounts), this suite proves the
+// full auth contract end-to-end, not just the watchlist wiring:
+//   (a) two different accounts get two different, isolated watchlists
+//   (b) wrong password is rejected (and is indistinguishable from unknown email)
+//   (c) logout actually invalidates the session — the old cookie gets 401
+//   (d) an unauthenticated /watchlist request returns 401, NOT a silently
+//       created anonymous user
 
 const fetch = require('node-fetch');
 const pool = require('../db/pool');
@@ -39,6 +47,12 @@ const fakeProvider = {
   },
 };
 
+// Extract the session_uid cookie from a Set-Cookie header.
+function cookieFrom(res) {
+  const header = res.headers.get('set-cookie');
+  return header ? header.split(';')[0] : null;
+}
+
 async function run() {
   await resetDb();
 
@@ -48,51 +62,100 @@ async function run() {
     logger: { log: () => {}, error: () => {} },
     isMarketOpenFn: () => true, // deterministic — this test must not depend on real-world wall-clock time
   });
-  const app = createApp({ marketDataClient, poller });
+  // Generous login budget so the auth-flow assertions below never trip the
+  // brute-force limiter; the limiter itself has its own focused test
+  // (auth.test.js) with a real tight window.
+  const app = createApp({
+    marketDataClient,
+    poller,
+    authOptions: { loginRateLimit: { maxAttempts: 1000, windowMs: 15 * 60 * 1000 } },
+  });
 
   const PORT = 3999;
   const server = app.listen(PORT);
   const base = `http://localhost:${PORT}`;
 
   try {
-    // ---- Test 1: first request creates a session cookie ----
+    // ---- Test 1: /health is fully public — no auth, no set-cookie ----
     const res1 = await fetch(`${base}/health`);
-    assertTrue('1. Health check reachable over real HTTP', res1.status === 200 || res1.status === 503, res1.status);
+    assertTrue('1. Health check reachable over real HTTP', res1.status === 200, res1.status);
 
-    const addRes = await fetch(`${base}/watchlist`, {
+    // ---- (d): an unauthenticated /watchlist request is 401, NOT a
+    // silently-created anonymous user. The "anonymous session" model is gone.
+    const anonWatchlist = await fetch(`${base}/watchlist`);
+    const anonBody = await anonWatchlist.json();
+    assertTrue(
+      'd. Unauthenticated /watchlist returns 401 not_authenticated',
+      anonWatchlist.status === 401 && anonBody.error.code === 'not_authenticated',
+      { status: anonWatchlist.status, body: anonBody }
+    );
+    assertTrue(
+      'd2. Unauthenticated request does NOT set a session cookie (no silent user minted)',
+      anonWatchlist.headers.get('set-cookie') === null && anonWatchlist.headers.get('set-cookie') === null,
+      anonWatchlist.headers.get('set-cookie')
+    );
+
+    // ---- Signup validation: password too short, bad email shape ----
+    const badPassword = await fetch(`${base}/auth/signup`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: 'alice@example.com', password: 'short' }),
+    });
+    const badPasswordBody = await badPassword.json();
+    assertTrue(
+      '0. Signup with a password under 8 chars is rejected',
+      badPassword.status === 400 && badPasswordBody.error.code === 'password_too_short',
+      badPasswordBody
+    );
+    const badEmail = await fetch(`${base}/auth/signup`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: 'not-an-email', password: 'password123' }),
+    });
+    assertTrue('0b. Signup with a malformed email is rejected', badEmail.status === 400, await badEmail.json());
+
+    // ---- Signup alice: 201 + session cookie ----
+    const aliceSignup = await fetch(`${base}/auth/signup`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: 'Alice@Example.com', password: 'alice-password-1' }),
+    });
+    const aliceCookie = cookieFrom(aliceSignup);
+    assertTrue('2. Signup returns 201 with normalized-to-lowercase email', aliceSignup.status === 201 && (await aliceSignup.json()).user.email === 'alice@example.com', aliceSignup.status);
+    assertTrue('2b. Signup issues a session cookie', aliceCookie !== null, aliceCookie);
+
+    // Duplicate email (same normalized lowercase) is rejected.
+    const dupSignup = await fetch(`${base}/auth/signup`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: 'alice@example.com', password: 'other-password-1' }),
+    });
+    assertTrue('2c. Duplicate email signup is rejected with 409 email_taken', dupSignup.status === 409, await dupSignup.json());
+
+    // ---- Authenticated watchlist flow (alice only) ----
+    const addRes = await fetch(`${base}/watchlist`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Cookie: aliceCookie },
       body: JSON.stringify({ symbol: 'reliance' }), // lowercase on purpose — tests normalization
     });
-    const setCookieHeader = addRes.headers.get('set-cookie');
-    assertTrue('2. Adding a symbol sets a session cookie', !!setCookieHeader, setCookieHeader);
-    assertTrue('2b. Add responds 201 with normalized uppercase symbol', addRes.status === 201, addRes.status);
-    const addBody = await addRes.json();
-    assertTrue('2c. Symbol normalized to uppercase', addBody.symbol === 'RELIANCE', addBody);
+    assertTrue('3. Authenticated add responds 201 with normalized uppercase symbol', addRes.status === 201 && (await addRes.json()).symbol === 'RELIANCE', addRes.status);
 
-    // Extract cookie to reuse across requests, simulating the same browser session.
-    const cookie = setCookieHeader.split(';')[0];
-
-    // ---- Test 3: with validation wired to a real provider call, adding a
-    // symbol now seeds an immediate snapshot (no need to wait for the
-    // poller's next cycle) — this replaced the old no_data_yet-on-add
-    // behavior with a strictly better one. Confirm that improvement here.
-    const listRes1 = await fetch(`${base}/watchlist`, { headers: { Cookie: cookie } });
+    const listRes1 = await fetch(`${base}/watchlist`, { headers: { Cookie: aliceCookie } });
     const listBody1 = await listRes1.json();
     assertTrue(
-      '3. Freshly added symbol has an immediate live snapshot (validation call double-purposed to seed it)',
+      '3b. Freshly added symbol has an immediate live snapshot (validation call double-purposed to seed it)',
       listBody1.items.length === 1 && listBody1.items[0].status === 'live' && listBody1.items[0].currentPrice !== null,
       listBody1
     );
     assertTrue(
-      '3b. First-ever view of a brand-new symbol correctly shows a true zero diff, not a crash or garbage number',
+      '3c. First-ever view of a brand-new symbol correctly shows a true zero diff, not a crash or garbage number',
       listBody1.items[0].diff.finalScore === 0 && listBody1.items[0].diff.reason === 'ok',
       listBody1.items[0].diff
     );
 
     // ---- Test 4: run the poller for real, then re-check the watchlist ----
     await poller.runCycle();
-    const listRes2 = await fetch(`${base}/watchlist`, { headers: { Cookie: cookie } });
+    const listRes2 = await fetch(`${base}/watchlist`, { headers: { Cookie: aliceCookie } });
     const listBody2 = await listRes2.json();
     const item = listBody2.items[0];
     assertTrue(
@@ -104,110 +167,148 @@ async function run() {
     // ---- Test 5: ack the current view, confirm it's recorded ----
     const ackRes = await fetch(`${base}/watchlist/RELIANCE/ack`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', Cookie: cookie },
+      headers: { 'Content-Type': 'application/json', Cookie: aliceCookie },
       body: JSON.stringify({ snapshotToken: item.snapshotToken }),
     });
     assertTrue('5. Ack succeeds', ackRes.status === 200, ackRes.status);
 
-    // ---- Test 6: a second browser (no cookie) gets its OWN independent session ----
-    const res2ndUser = await fetch(`${base}/watchlist`);
-    const cookie2ndUser = res2ndUser.headers.get('set-cookie');
-    assertTrue('6. A request with no cookie gets a fresh, different session', !!cookie2ndUser && cookie2ndUser !== setCookieHeader, { cookie2ndUser, setCookieHeader });
-    const body2ndUser = await res2ndUser.json();
-    assertTrue('6b. New session has an empty watchlist (no data leakage between users)', body2ndUser.items.length === 0, body2ndUser);
-
-    // ---- Test 7: remove the symbol, confirm it's gone ----
-    const delRes = await fetch(`${base}/watchlist/RELIANCE`, { method: 'DELETE', headers: { Cookie: cookie } });
-    assertTrue('7. Delete responds 204', delRes.status === 204, delRes.status);
-    const listRes3 = await fetch(`${base}/watchlist`, { headers: { Cookie: cookie } });
-    const listBody3 = await listRes3.json();
-    assertTrue('7b. Symbol no longer in watchlist after delete', listBody3.items.length === 0, listBody3);
-
-    // ---- Test 8: missing symbol on POST returns a clean error envelope ----
-    const badRes = await fetch(`${base}/watchlist`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Cookie: cookie },
-      body: JSON.stringify({}),
-    });
-    const badBody = await badRes.json();
-    assertTrue(
-      '8. Missing symbol returns uniform error envelope',
-      badRes.status === 400 && badBody.error && badBody.error.code === 'missing_symbol',
-      badBody
-    );
-
-    // ---- Test 9: unknown/invalid symbol is rejected with 422, never touches the DB ----
-    const invalidRes = await fetch(`${base}/watchlist`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Cookie: cookie },
-      body: JSON.stringify({ symbol: 'THISSYMBOLDOESNOTEXISTANYWHERE' }),
-    });
-    const invalidBody = await invalidRes.json();
-    assertTrue(
-      '9. Unknown symbol rejected with 422 and correct error code',
-      invalidRes.status === 422 && invalidBody.error && invalidBody.error.code === 'unknown_symbol',
-      invalidBody
-    );
-    const listAfterInvalid = await fetch(`${base}/watchlist`, { headers: { Cookie: cookie } });
-    const listAfterInvalidBody = await listAfterInvalid.json();
-    assertTrue(
-      '9b. Rejected symbol did not get added to the watchlist',
-      listAfterInvalidBody.items.every((i) => i.symbol !== 'THISSYMBOLDOESNOTEXISTANYWHERE'),
-      listAfterInvalidBody
-    );
-
-  // ---- Test 10: cross-site origin on a state-changing request is rejected ----
-    // CSRF defense-in-depth beyond sameSite:strict. node-fetch sends no
-    // Origin by default, so the explicit evil Origin here is what triggers it.
+    // ---- Test 6: cross-site origin on a state-changing request is rejected ----
+    // node-fetch sends no Origin by default, so the explicit evil Origin is
+    // what triggers the check.
     const csrfRes = await fetch(`${base}/watchlist`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', Origin: 'http://evil.example', Cookie: cookie },
+      headers: { 'Content-Type': 'application/json', Origin: 'http://evil.example', Cookie: aliceCookie },
       body: JSON.stringify({ symbol: 'INFY' }),
     });
     const csrfBody = await csrfRes.json();
     assertTrue(
-      '10. Cross-origin POST rejected with 403 and correct error code',
-      csrfRes.status === 403 && csrfBody.error && csrfBody.error.code === 'cross_origin_forbidden',
+      '6. Cross-origin POST rejected with 403 and correct error code',
+      csrfRes.status === 403 && csrfBody.error.code === 'cross_origin_forbidden',
       csrfBody
     );
 
-    // Test 10b: the SAME request sent without an Origin header (normal
-    // same-origin browser fetch via the Vite proxy, or curl) is unaffected.
-    const noOriginRes = await fetch(`${base}/watchlist`, {
+    // ---- Test 7: missing symbol / unknown symbol error envelopes ----
+    const badBodyRes = await fetch(`${base}/watchlist`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', Cookie: cookie },
-      body: JSON.stringify({ symbol: 'INFY' }),
+      headers: { 'Content-Type': 'application/json', Cookie: aliceCookie },
+      body: JSON.stringify({}),
     });
-    assertTrue('10b. Same request without Origin is accepted normally', noOriginRes.status === 201, noOriginRes.status);
+    assertTrue('7. Missing symbol returns 400 missing_symbol', badBodyRes.status === 400 && (await badBodyRes.json()).error.code === 'missing_symbol', badBodyRes.status);
 
-    // ---- Test 11: a signed-but-orphaned session cookie (its user row was
-    // deleted, e.g. by a DB reset) must NOT 500 — the middleware substitutes a
-    // fresh anonymous session and the request succeeds. Regression for the
-    // FK-23503 crash found live: TRUNCATE users CASCADE orphaned pre-reset
-    // cookies, and addToWatchlist then blew up on the missing parent row. ----
-    const orphanCookieSetup = await fetch(`${base}/watchlist`); // mints a fresh session
-    const orphanCookieHeader = orphanCookieSetup.headers.get('set-cookie');
-    const orphanCookie = orphanCookieHeader ? orphanCookieHeader.split(';')[0] : null;
-    assertTrue('11. Orphan-cookie setup produced a cookie', !!orphanCookie, orphanCookieHeader);
-    await pool.query('DELETE FROM users'); // orphan every session, simulating a DB reset
-    const orphanRes = await fetch(`${base}/watchlist`, {
+    const invalidRes = await fetch(`${base}/watchlist`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', Cookie: orphanCookie },
+      headers: { 'Content-Type': 'application/json', Cookie: aliceCookie },
+      body: JSON.stringify({ symbol: 'THISSYMBOLDOESNOTEXISTANYWHERE' }),
+    });
+    assertTrue('7b. Unknown symbol rejected with 422 unknown_symbol', invalidRes.status === 422 && (await invalidRes.json()).error.code === 'unknown_symbol', invalidRes.status);
+
+    // ---- (a): bob is a different account with his own, empty watchlist ----
+    const bobSignup = await fetch(`${base}/auth/signup`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: 'bob@example.com', password: 'bob-password-1' }),
+    });
+    const bobCookie = cookieFrom(bobSignup);
+    const bobList = await fetch(`${base}/watchlist`, { headers: { Cookie: bobCookie } });
+    const bobListBody = await bobList.json();
+    assertTrue(
+      'a. Two separate accounts: bob sees an empty watchlist while alice has items (no data leakage)',
+      bobListBody.items.length === 0 && listBody1.items.length === 1,
+      { bob: bobListBody, alice: listBody1 }
+    );
+
+    // ---- (b): wrong password is rejected; and it is indistinguishable from
+    // unknown-email (same 401 code + body, no account enumeration) ----
+    const wrongPass = await fetch(`${base}/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: 'alice@example.com', password: 'wrong-password-999' }),
+    });
+    const wrongPassBody = await wrongPass.json();
+    const unknownEmail = await fetch(`${base}/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: 'nobody@example.com', password: 'whatever-password' }),
+    });
+    const unknownEmailBody = await unknownEmail.json();
+    assertTrue(
+      'b. Wrong password is rejected with 401 invalid_credentials',
+      wrongPass.status === 401 && wrongPassBody.error.code === 'invalid_credentials',
+      wrongPassBody
+    );
+    assertTrue(
+      'b2. Unknown email gets the SAME response as a wrong password (no enumeration)',
+      wrongPass.status === unknownEmail.status &&
+        JSON.stringify(wrongPassBody) === JSON.stringify(unknownEmailBody),
+      { wrongPassBody, unknownEmailBody }
+    );
+
+    // ---- (c): logout invalidates the session — the old cookie is dead ----
+    const logoutRes = await fetch(`${base}/auth/logout`, {
+      method: 'POST',
+      headers: { Cookie: aliceCookie },
+    });
+    assertTrue('c. Logout returns 204', logoutRes.status === 204, logoutRes.status);
+    const afterLogout = await fetch(`${base}/watchlist`, { headers: { Cookie: aliceCookie } });
+    const afterLogoutBody = await afterLogout.json();
+    assertTrue(
+      'c2. Watchlist request with the logged-out cookie returns 401 (session invalidated)',
+      afterLogout.status === 401 && afterLogoutBody.error.code === 'not_authenticated',
+      { status: afterLogout.status, body: afterLogoutBody }
+    );
+    // Logout must also invalidate the same session for state-changing routes.
+    const afterLogoutAdd = await fetch(`${base}/watchlist`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Cookie: aliceCookie },
       body: JSON.stringify({ symbol: 'TCS' }),
     });
-    const orphanBody = await orphanRes.json();
-    const orphanSetCookie = orphanRes.headers.get('set-cookie');
+    assertTrue('c3. Adding with the logged-out cookie also 401s', afterLogoutAdd.status === 401, afterLogoutAdd.status);
+
+    // ---- Login restores the account: 200 + a working cookie, and alice's
+    // watchlist is still there (persistence across "devices"/sessions) ----
+    const aliceLogin = await fetch(`${base}/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: 'alice@example.com', password: 'alice-password-1' }),
+    });
+    const aliceLoginCookie = cookieFrom(aliceLogin);
+    assertTrue('d3. Correct login returns 200 with a fresh session cookie', aliceLogin.status === 200 && aliceLoginCookie !== null, aliceLogin.status);
+    const restored = await fetch(`${base}/watchlist`, { headers: { Cookie: aliceLoginCookie } });
+    const restoredBody = await restored.json();
     assertTrue(
-      '11. Orphaned cookie gets a fresh anonymous session, not a 500',
-      orphanRes.status === 201 && !!orphanSetCookie && !!orphanCookie && orphanSetCookie.split(';')[0] !== orphanCookie,
-      { status: orphanRes.status, orphanSetCookie, body: orphanBody }
+      'd4. Watchlist persists across sessions — RELIANCE still there after login',
+      restoredBody.items.some((i) => i.symbol === 'RELIANCE'),
+      restoredBody
     );
-    const orphanList = await fetch(`${base}/watchlist`, { headers: { Cookie: orphanSetCookie.split(';')[0] } });
-    const orphanListBody = await orphanList.json();
+
+    // ---- Delete flow (authenticated, with the fresh login cookie) ----
+    const delRes = await fetch(`${base}/watchlist/RELIANCE`, { method: 'DELETE', headers: { Cookie: aliceLoginCookie } });
+    assertTrue('8. Delete responds 204', delRes.status === 204, delRes.status);
+    const listRes3 = await fetch(`${base}/watchlist`, { headers: { Cookie: aliceLoginCookie } });
+    const listBody3 = await listRes3.json();
+    assertTrue('8b. Symbol no longer in watchlist after delete', listBody3.items.length === 0, listBody3);
+
+    // ---- Orphaned cookie: valid signature but the user row is gone. The new
+    // model must answer 401, never crash (FK 23503 regression from bug #10)
+    // and never mint a replacement anonymous account. ----
+    const orphanSetup = await fetch(`${base}/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: 'alice@example.com', password: 'alice-password-1' }),
+    });
+    const orphanCookie = cookieFrom(orphanSetup);
+    await pool.query('DELETE FROM users'); // orphan every session
+    const orphanRes = await fetch(`${base}/watchlist`, { headers: { Cookie: orphanCookie } });
+    const orphanBody = await orphanRes.json();
     assertTrue(
-      '11b. Orphaned-session add actually persisted (fresh user owns it now)',
-      orphanListBody.items.some((i) => i.symbol === 'TCS'),
-      orphanListBody
+      '9. Orphaned-cookie request returns 401, not a 500 (bug #10 regression)',
+      orphanRes.status === 401 && orphanBody.error.code === 'not_authenticated',
+      { status: orphanRes.status, body: orphanBody }
+    );
+    assertTrue(
+      '9b. Orphaned-cookie request does not silently create a new account',
+      (await fetch(`${base}/watchlist`)).status === 401,
+      'both unauthenticated callers got 401'
     );
 
   } finally {

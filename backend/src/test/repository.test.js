@@ -29,6 +29,15 @@ async function resetDb() {
   await pool.query('DELETE FROM users');
 }
 
+// Accounts require email + password_hash now (migration 002); these tests
+// only exercise watchlist plumbing, so any dummy values work.
+const DUMMY_HASH = '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy';
+let userSeq = 0;
+async function makeUser() {
+  userSeq++;
+  return repo.createUser(`test-${userSeq}-${Date.now()}@test.local`, DUMMY_HASH);
+}
+
 async function run() {
   await resetDb();
 
@@ -50,7 +59,7 @@ async function run() {
 
   // ---- Test 2: idempotent watchlist add — duplicate add is a safe no-op ----
   {
-    const user = await repo.createUser();
+    const user = await makeUser();
     await repo.addToWatchlist(user.id, 'RELIANCE');
     await repo.addToWatchlist(user.id, 'RELIANCE'); // duplicate, should not error or double-insert
     const count = await repo.getWatchlistCount(user.id);
@@ -59,7 +68,7 @@ async function run() {
 
   // ---- Test 3: watchlist size cap is enforceable at the query layer ----
   {
-    const user = await repo.createUser();
+    const user = await makeUser();
     for (let i = 0; i < 5; i++) {
       const symbol = `TESTSTOCK${i}`;
       await repo.ensureBaselineExists(symbol);
@@ -95,7 +104,7 @@ async function run() {
 
   // ---- Test 6: ack cannot move seen_at backwards (replay protection) ----
   {
-    const user = await repo.createUser();
+    const user = await makeUser();
     await repo.ensureBaselineExists('INFY');
     await repo.addToWatchlist(user.id, 'INFY');
 
@@ -119,8 +128,8 @@ async function run() {
   // ---- Test 7: getDistinctWatchedSymbols reflects only currently-watched symbols ----
   {
     await resetDb();
-    const userA = await repo.createUser();
-    const userB = await repo.createUser();
+    const userA = await makeUser();
+    const userB = await makeUser();
     await repo.ensureBaselineExists('WIPRO');
     await repo.ensureBaselineExists('HDFC');
     await repo.addToWatchlist(userA.id, 'WIPRO');
@@ -146,7 +155,7 @@ async function run() {
   // ---- Test 8: getWatchlistWithData returns a single joined row per symbol ----
   {
     await resetDb();
-    const user = await repo.createUser();
+    const user = await makeUser();
     await repo.ensureBaselineExists('AXISBANK');
     await repo.markBaselineReady('AXISBANK', { typicalDailyVolatility: 0.018, avgVolume: 80000, historyDaysUsed: 20 });
     await repo.upsertSnapshot('AXISBANK', { price: 1100, volume: 90000, isStale: false, marketClosed: false });

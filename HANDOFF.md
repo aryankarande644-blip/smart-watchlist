@@ -121,7 +121,8 @@ amplification)
 ## 4. Full data model
 
 ```sql
--- users: anonymous session identity, no signup/password (see Section 7)
+-- users: real accounts (email + bcrypt password hash + session_version);
+-- anonymous-session model superseded by migration 002 (see Section 6)
 CREATE TABLE users (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
@@ -239,12 +240,38 @@ Files: `backend/src/routes/watchlist.js`, `backend/src/routes/health.js`
 ## 6. Every architectural decision, with the reasoning (so a new agent
 doesn't accidentally undo one)
 
-### Identity: anonymous signed cookie, not real auth
-No signup form needed for hackathon scope. `userId` is a real UUID the
-server trusts via HMAC-signed `httpOnly, sameSite:strict` cookie, generated
-on first visit. **Tradeoff, stated openly for the pitch:** clearing cookies
-or switching browsers loses the watchlist. This is an accepted, explained
-scope boundary, not a hidden bug.
+### Identity: real email/password accounts (supersedes anonymous sessions)
+**ANONYMOUS-SESSION MODEL SUPERSEDED (migration 002, 2026-09-05).** The
+original design was: no signup form, `userId` is a UUID the server trusts via
+an HMAC-signed `httpOnly` cookie generated on first visit — with the tradeoff
+stated openly that clearing cookies sends the watchlist away (a scope
+boundary, not a hidden bug). That model is now replaced by real accounts:
+
+- `users` gained `email` (TEXT UNIQUE NOT NULL), `password_hash`
+  (bcryptjs, cost 10 — pure-JS on purpose, Render's native-binding risk),
+  and `session_version` (INTEGER NOT NULL DEFAULT 0). Anonymous rows were
+  wiped in a clean cutover (`002_add_auth.sql`).
+- The signed cookie payload is now `userId.sessionVersion`
+  (`session_uid=<id>.<version>.<hmac>`). The version is the server-side
+  session state that makes logout real: `POST /logout` bumps it, so every
+  cookie already issued stops verifying — replay of an old cookie string
+  gets 401, never a session.
+- `sessionMiddleware` only *resolves* an existing valid cookie (`/health`
+  stays fully public, mounted before it); it never creates users. Protected
+  `/watchlist` routes answer `401 not_authenticated` when there's no
+  session — no silent anonymous account is minted anymore.
+- `POST /auth/signup` (validation: email shape, password ≥ 8 chars,
+  duplicate email → `409 email_taken`), `POST /auth/login` (100% generic
+  `401 invalid_credentials` for wrong password *or* unknown email — plus a
+  dummy bcrypt compare so timing doesn't leak account existence),
+  `POST /auth/logout` (revokes + clears). Login is rate-limited per IP
+  (10 per 15 min sliding window).
+- **Why:** persistent watchlists across devices was a hard product gap of
+  the cookie-only model. **Explicitly deferred future scope, not forgotten:**
+  OAuth (Google/GitHub) and email verification — no email infrastructure
+  exists at hackathon scope, and OAuth needs a separate provider/app setup;
+  both are clean future additions since passwords already live in-bcrypt
+  and the session layer is account-based, not cookie-based.
 
 ### Three distinct "no fresh data" states, not one
 Real testing forced this distinction (see Section 8, bug #6):
@@ -379,7 +406,7 @@ real traps, not hypotheticals)
 | 7 | A test run showed an absurd 359x "meaningful" score | Local dev DB was shared and polluted across automated test runs and manual verification sessions | Added `scripts/reset-dev-db.sql` |
 | 8 | Nothing to demo without a live market API key | No network path to a real provider in the build sandbox | Built `demoProvider.js` as an explicit, labeled fallback |
 | 9 | `fetchHistorical` always failed whenever the market was open | Yahoo returns the current in-progress session as a 1d candle with `close:null`, and yahoo-finance2's `historical()` wrapper throws on ANY row with a null close — so baseline computation died during trading hours, exactly when the app runs | Switched `realProvider.fetchHistorical` to the `chart()` endpoint (returns nulls gracefully) and filter out incomplete candles before slicing; incomplete candles must never enter a volatility baseline anyway |
-| 10 | After a DB reset (`TRUNCATE ... users CASCADE`), the app returned 500s ("Could not add that symbol") for pre-reset sessions | `session_uid` cookies are signed and live 1 year; the middleware verified the signature but never checked the `users` row still existed, so `addToWatchlist`'s INSERT blew up on FK `watchlist_entry_user_id_fkey` (SQL 23503). Found live via raw-error capture on `/health` | Middleware now checks the user row exists; a signed-but-orphaned cookie silently gets a *fresh* anonymous session + rotated cookie instead of crashing. Regression-tested (e2e 11/11b) and verified live against Neon |
+| 10 | After a DB reset (`TRUNCATE ... users CASCADE`), the app returned 500s ("Could not add that symbol") for pre-reset sessions | `session_uid` cookies are signed and live 1 year; the middleware verified the signature but never checked the `users` row still existed, so `addToWatchlist`'s INSERT blew up on FK `watchlist_entry_user_id_fkey` (SQL 23503). Found live via raw-error capture on `/health` | Middleware now checks the user row exists; a signed-but-orphaned cookie silently gets a *fresh* anonymous session + rotated cookie instead of crashing. Regression-tested (e2e 11/11b) and verified live against Neon. **Superseded by migration 002 (2026-09-05):** the middleware no longer auto-creates anything; an orphaned cookie simply has no session and `/watchlist` answers `401 not_authenticated` (e2e 9/9b) |
 | 11 | A brand-new symbol could stay on "Establishing baseline" (`no_data_yet`) forever, baseline stuck `pending` with `last_computed_at = NULL` | If an add aborts **between** `ensureBaselineExists` (inserts the `pending` row) and the awaited `computeBaselineForSymbol`, the row is wedged: the poller never touches `pending` by design (`getRefreshableBaselineSymbols` excludes it) and later adds see `created:false` so they skip the compute. The "pending = compute in-flight" invariant quietly breaks on a crash abort — exactly what bug #10's FK crash did to WIPRO. Found while confirming a fresh WIPRO add | Recovered WIPRO in production by running the same production path (`fetchQuote` → `upsertSnapshot` → `computeBaselineForSymbol`) to `ready`. **Follow-up:** give `pending`-with-`last_computed_at IS NULL` self-healing (poller retry after a TTL, or add-path retry when `created:false` but still `pending`) |
 
 **The lesson for whoever picks this up:** paper review and planning caught
@@ -417,8 +444,9 @@ backend/
     poller/
       poller.js                 -- per-symbol isolated, overlap-guarded, market-hours + real 2026 NSE holidays
     routes/
-      session.js                 -- anonymous signed-cookie identity
-      watchlist.js                -- GET/POST/DELETE/ack, live symbol validation
+      session.js                 -- session cookie resolve-only middleware (+ sign/verify/issue/clear; versioned payload)
+      auth.js                    -- signup / login / logout, login rate-limited per IP
+      watchlist.js                -- GET/POST/DELETE/ack, live symbol validation, 401-guarded
       health.js                   -- DB + poller + circuit status
     test/
       diffEngine.test.js          -- 17 tests

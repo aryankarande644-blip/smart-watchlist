@@ -19,15 +19,24 @@ const SAME_SITE = ['strict', 'lax', 'none'].includes(process.env.SESSION_COOKIE_
 // Secure is mandatory for SameSite=None (browsers reject it otherwise);
 // otherwise follow NODE_ENV.
 const IS_SECURE = SAME_SITE === 'none' || process.env.NODE_ENV === 'production';
+const COOKIE_MAX_AGE_MS = 1000 * 60 * 60 * 24 * 365; // 1 year
 
-function sign(value) {
+// Cookie payload is `${userId}.${sessionVersion}` — the version is the
+// server-side session state that makes logout real. A cookie issued before a
+// logout carries an older version than the user row, so verification fails and
+// the request 401s even if the cookie string itself is replayed.
+function sign(userId, sessionVersion) {
+  const value = `${userId}.${sessionVersion}`;
   const hmac = crypto.createHmac('sha256', SECRET).update(value).digest('hex');
   return `${value}.${hmac}`;
 }
 
+// Returns { userId, version } on success, null on any signature problem.
 function verify(signed) {
-  if (!signed || !signed.includes('.')) return null;
-  const [value, sig] = signed.split('.');
+  if (!signed) return null;
+  const lastDot = signed.lastIndexOf('.');
+  if (lastDot <= 0) return null;
+  const [value, sig] = [signed.slice(0, lastDot), signed.slice(lastDot + 1)];
   const expected = crypto.createHmac('sha256', SECRET).update(value).digest('hex');
   // Constant-time comparison to avoid timing attacks on the signature check.
   const sigBuf = Buffer.from(sig || '', 'hex');
@@ -35,49 +44,63 @@ function verify(signed) {
   if (sigBuf.length !== expBuf.length || !crypto.timingSafeEqual(sigBuf, expBuf)) {
     return null;
   }
-  return value;
+  const [userId, versionStr] = value.split('.');
+  const version = Number(versionStr);
+  if (!userId || !Number.isInteger(version)) return null;
+  return { userId, version };
 }
 
-// Middleware: resolves req.userId, creating a new anonymous user + cookie
-// on first visit. No signup form, no password — session identity only.
+// Read-only cookie inspection (for logout, which must revoke even a replay of
+// an already-invalidated cookie).
+function readSession(req) {
+  const cookieVal = req.cookies?.[COOKIE_NAME];
+  return cookieVal ? verify(cookieVal) : null;
+}
+
+// Shared cookie issuance: used by the /auth routes after signup/login so the
+// exact same cookie attributes (and signature scheme) drive every session.
+function setSessionCookie(res, userId, version) {
+  res.cookie(COOKIE_NAME, sign(userId, version), {
+    httpOnly: true,
+    sameSite: SAME_SITE,
+    secure: IS_SECURE,
+    maxAge: COOKIE_MAX_AGE_MS,
+  });
+}
+
+// Clearing must mirror the set options, or the browser won't delete it.
+function clearSessionCookie(res) {
+  res.clearCookie(COOKIE_NAME, {
+    httpOnly: true,
+    sameSite: SAME_SITE,
+    secure: IS_SECURE,
+  });
+}
+
+// Middleware: purely resolves an EXISTING valid session cookie into
+// req.userId. It never creates accounts — the anonymous-session model was
+// superseded by real email/password accounts (migration 002 + /auth routes).
+// A request with no cookie, an invalid signature, a cookie from a deleted
+// user, or a cookie whose session version is stale (logged out) has no
+// req.userId; protected routes then answer 401 (not_authenticated) instead of
+// silently minting a user. This also makes the old FK-23503 orphaned-cookie
+// crash (HANDOFF §8, bug #10) structurally impossible: nothing writes a
+// watchlist row for a nonexistent user because nothing auto-creates one.
+// /health is registered before this middleware and stays fully public.
 async function sessionMiddleware(req, res, next) {
   try {
-    const cookieVal = req.cookies?.[COOKIE_NAME];
-    const userId = cookieVal ? verify(cookieVal) : null;
+    const session = readSession(req);
 
-    if (userId) {
-      const exists = await repo.userExists(userId);
-      if (exists) {
-        req.userId = userId;
-        return next();
+    if (session) {
+      const user = await repo.getUserById(session.userId);
+      if (user && user.session_version === session.version) {
+        req.userId = user.id;
       }
-
-      // Signed cookie is valid but its user row is gone (e.g. a DB reset /
-      // TRUNCATE users CASCADE). Keep the request working: substitute a fresh
-      // anonymous session instead of letting the FK throw a 500 later.
-      const freshUser = await repo.createUser();
-      res.cookie(COOKIE_NAME, sign(freshUser.id), {
-        httpOnly: true,
-        sameSite: SAME_SITE,
-        secure: IS_SECURE,
-        maxAge: 1000 * 60 * 60 * 24 * 365,
-      });
-      req.userId = freshUser.id;
-      return next();
     }
-
-    const user = await repo.createUser();
-    res.cookie(COOKIE_NAME, sign(user.id), {
-      httpOnly: true,
-      sameSite: SAME_SITE,
-      secure: IS_SECURE,
-      maxAge: 1000 * 60 * 60 * 24 * 365, // 1 year
-    });
-    req.userId = user.id;
     next();
   } catch (err) {
     next(err);
   }
 }
 
-module.exports = { sessionMiddleware };
+module.exports = { sessionMiddleware, setSessionCookie, clearSessionCookie, readSession, COOKIE_NAME };

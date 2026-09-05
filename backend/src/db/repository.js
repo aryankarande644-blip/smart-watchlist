@@ -3,11 +3,41 @@ const pool = require('./pool');
 
 // ---- Users ----
 
-async function createUser() {
+// Accounts replaced anonymous sessions (migration 002). Email is normalized
+// to lowercase by the route layer; the UNIQUE constraint is the final backstop
+// against duplicate-account races.
+async function createUser(email, passwordHash) {
   const { rows } = await pool.query(
-    'INSERT INTO users DEFAULT VALUES RETURNING id, created_at'
+    'INSERT INTO users (email, password_hash) VALUES ($1, $2) RETURNING id, email, created_at, session_version',
+    [email, passwordHash]
   );
   return rows[0];
+}
+
+async function findUserByEmail(email) {
+  const { rows } = await pool.query(
+    'SELECT id, email, password_hash, created_at, session_version FROM users WHERE email = $1',
+    [email]
+  );
+  return rows[0] || null;
+}
+
+async function getUserById(userId) {
+  const { rows } = await pool.query(
+    'SELECT id, email, created_at, session_version FROM users WHERE id = $1',
+    [userId]
+  );
+  return rows[0] || null;
+}
+
+// Logout / session revocation: bumping the version invalidates every cookie
+// already issued to a user. The signed cookie carries the version it was
+// issued at; any older version now fails verification (and therefore 401s).
+async function bumpSessionVersion(userId) {
+  await pool.query(
+    'UPDATE users SET session_version = session_version + 1 WHERE id = $1',
+    [userId]
+  );
 }
 
 async function userExists(userId) {
@@ -206,6 +236,9 @@ async function getLastSeen(userId, symbol) {
 
 module.exports = {
   createUser,
+  findUserByEmail,
+  getUserById,
+  bumpSessionVersion,
   userExists,
   ensureBaselineExists,
   getBaseline,

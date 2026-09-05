@@ -4,6 +4,7 @@ const cookieParser = require('cookie-parser');
 const cors = require('cors');
 
 const { sessionMiddleware } = require('./routes/session');
+const { createAuthRouter } = require('./routes/auth');
 const createWatchlistRouter = require('./routes/watchlist');
 const { createHealthRouter } = require('./routes/health');
 const { createMarketDataClient } = require('./marketData/client');
@@ -35,7 +36,7 @@ function originCheck(allowed) {
   };
 }
 
-function createApp({ marketDataClient, poller }) {
+function createApp({ marketDataClient, poller, authOptions = {} }) {
   const app = express();
 
   app.use(cors({ origin: FRONTEND_ORIGIN, credentials: true })); // credentials:true required for the cookie session to attach
@@ -46,6 +47,7 @@ function createApp({ marketDataClient, poller }) {
   app.use(createHealthRouter({ poller, marketDataClient }));
   app.use(sessionMiddleware);
 
+  app.use('/auth', createAuthRouter(authOptions));
   app.use(createWatchlistRouter({ marketDataClient }));
 
   // Central error handler — every route's `next(err)` lands here.
