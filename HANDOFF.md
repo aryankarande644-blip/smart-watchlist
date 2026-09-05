@@ -379,6 +379,7 @@ real traps, not hypotheticals)
 | 7 | A test run showed an absurd 359x "meaningful" score | Local dev DB was shared and polluted across automated test runs and manual verification sessions | Added `scripts/reset-dev-db.sql` |
 | 8 | Nothing to demo without a live market API key | No network path to a real provider in the build sandbox | Built `demoProvider.js` as an explicit, labeled fallback |
 | 9 | `fetchHistorical` always failed whenever the market was open | Yahoo returns the current in-progress session as a 1d candle with `close:null`, and yahoo-finance2's `historical()` wrapper throws on ANY row with a null close — so baseline computation died during trading hours, exactly when the app runs | Switched `realProvider.fetchHistorical` to the `chart()` endpoint (returns nulls gracefully) and filter out incomplete candles before slicing; incomplete candles must never enter a volatility baseline anyway |
+| 10 | After a DB reset (`TRUNCATE ... users CASCADE`), the app returned 500s ("Could not add that symbol") for pre-reset sessions | `session_uid` cookies are signed and live 1 year; the middleware verified the signature but never checked the `users` row still existed, so `addToWatchlist`'s INSERT blew up on FK `watchlist_entry_user_id_fkey` (SQL 23503). Found live via raw-error capture on `/health` | Middleware now checks the user row exists; a signed-but-orphaned cookie silently gets a *fresh* anonymous session + rotated cookie instead of crashing. Regression-tested (e2e 11/11b) and verified live against Neon |
 
 **The lesson for whoever picks this up:** paper review and planning caught
 the *big* architectural risks (race conditions, divide-by-zero, resilience
@@ -540,9 +541,12 @@ snapshot, baseline, users CASCADE`), re-verified live end-to-end:
   is still worth doing by hand (item A below).
 
 **Open items (not blocking; none are deployment blockers):**
-- **A.** Run one manual incognito-window click test on the hazel URL (add
-  a symbol, refresh, confirm it persists) — HTTP-level cookie contract is
-  proven, browser-level double-check remains.
+- **A.** ~~Manual incognito click-test remaining.~~ **RESOLVED (2026-09-05):**
+  the incognito add failure was bug #10 (orphaned session cookie -> FK
+  23503 500). Fixed + verified live — a simulated orphaned cookie now
+  returns 201 with a rotated session and the add persists. A manual
+  incognito add on `smart-watchlist-hazel.vercel.app` should now work
+  end-to-end.
 - **B.** ~~`https://smart-watchlist.vercel.app` (stale build)~~ **RESOLVED /
   NON-ISSUE (2026-09-05):** that URL is not ours at all — it's an
   unrelated third-party movie-watchlist app that happens to share the
