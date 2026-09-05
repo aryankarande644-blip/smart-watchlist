@@ -9,6 +9,7 @@ const { createHealthRouter } = require('./routes/health');
 const { createMarketDataClient } = require('./marketData/client');
 const { createPoller } = require('./poller/poller');
 const { createBaselineRefresher } = require('./baseline/refreshBaselines');
+const { recordRouteError } = require('./diagnostics');
 const pool = require('./db/pool');
 
 const PORT = process.env.PORT || 3001;
@@ -49,7 +50,10 @@ function createApp({ marketDataClient, poller }) {
 
   // Central error handler — every route's `next(err)` lands here.
   app.use((err, req, res, next) => {
-    console.error(JSON.stringify({ event: 'unhandled_route_error', message: err.message }));
+    const route = `${req.method} ${req.originalUrl || req.url}`;
+    const full = { event: 'unhandled_route_error', route, name: err && err.name, message: err && err.message ? String(err.message) : String(err), code: err && err.code, stack: err && err.stack };
+    console.error(JSON.stringify(full));
+    recordRouteError(err, req);
     res.status(500).json({ error: { code: 'internal_error', message: 'something went wrong' } });
   });
 
