@@ -543,14 +543,13 @@ snapshot, baseline, users CASCADE`), re-verified live end-to-end:
 - **A.** Run one manual incognito-window click test on the hazel URL (add
   a symbol, refresh, confirm it persists) — HTTP-level cookie contract is
   proven, browser-level double-check remains.
-- **B.** `https://smart-watchlist.vercel.app` still serves a STALE build
-  (no `VITE_API_BASE_URL` baked in — its `/watchlist` calls 404 on
-  Vercel). The live build is on the `smart-watchlist-hazel` alias.
-  **Requires a Vercel dashboard action (no CLI/token was available in the
-  build environment):** in Vercel, delete the old deployment/project that
-  owns the `smart-watchlist.vercel.app` alias (or repoint that alias to
-  the current build). Done correctly, `curl https://smart-watchlist.vercel.app/`
-  should serve the same `index-CXxlgvM5.js` bundle as the hazel URL.
+- **B.** ~~`https://smart-watchlist.vercel.app` (stale build)~~ **RESOLVED /
+  NON-ISSUE (2026-09-05):** that URL is not ours at all — it's an
+  unrelated third-party movie-watchlist app that happens to share the
+  name. It never hosted our frontend. Our only live URL is
+  `https://smart-watchlist-hazel.vercel.app` (correct build incl.
+  `VITE_API_BASE_URL=https://watchlist-backend-mt3i.onrender.com`);
+  nothing to retire or repoint.
 - **C.** ~~Anonymous session bloat from cookie-less `/health` polling
   (~17k rows/day).~~ **RESOLVED + VERIFIED LIVE (2026-09-05):** `/health`
   is registered *before* the session middleware in `server.js`, so health
