@@ -168,7 +168,7 @@ export function App() {
       <TickerStrip />
       <div className="shell">
         <nav className="side-nav" aria-label="Primary">
-          <div className="side-nav__brand">Uptick</div>
+          <div className="side-nav__brand">TRADEYE</div>
           <ul className="side-nav__list">
             <li>
               <button
@@ -193,7 +193,7 @@ export function App() {
               </button>
             </li>
           </ul>
-          <p className="side-nav__tag">Know what moves, and why.</p>
+          <p className="side-nav__tag">An extra eye on the market.</p>
         </nav>
 
         <div className="content">

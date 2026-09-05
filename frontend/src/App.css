@@ -1,4 +1,4 @@
-/* src/App.css — light theme "Uptick" design */
+/* src/App.css — light theme "TRADEYE" design */
 
 /* ---- Layout ---- */
 .app {
@@ -8,7 +8,7 @@
   flex-direction: column;
 }
 
-/* Uptick app body: persistent full-height sidebar (Watchlist / Market Radar)
+/* TRADEYE app body: persistent full-height sidebar (Watchlist / Market Radar)
    beside a scrollable content column. The sidebar is sticky beneath the ticker
    strip so it stays in view on every screen regardless of activeView. */
 .shell {

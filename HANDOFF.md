@@ -1,4 +1,4 @@
-# Uptick — Smart Market Watchlist, Complete Build Handoff
+# TRADEYE — Smart Market Watchlist, Complete Build Handoff
 
 This document is self-contained. It assumes zero prior context. Read it top
 to bottom before touching code. Working, tested code already exists for
@@ -469,8 +469,9 @@ as primary defense, plus `/health` honestly reporting
 | `market_closed` row | Trading hours ended | Badge, price still shown |
 | Meaningful change | `diff.isMeaningful === true` | Gold left-border highlight, "Mark seen" button appears |
 
-Design tokens (light "Uptick" theme — the app was renamed from "Pulse" to
-"Uptick" in the final navigation pass 2026-09-05; the earlier dark ledger theme
+Design tokens (light "TRADEYE" theme — the app went "Pulse" → "Uptick" in the
+final navigation pass 2026-09-05 and was renamed to **TRADEYE** (quote: **"An
+extra eye on the market."**) on 2026-09-05; the earlier dark ledger theme
 was replaced by a white background, near-black text, hairline borders, colored
 badges, and a persistent top ticker strip):
 - Background `#FFFFFF`, primary text `#1A1A1A`, secondary text `#6B7280`
@@ -484,8 +485,8 @@ badges, and a persistent top ticker strip):
 - Persistent top ticker strip (NIFTY 50, SENSEX) reads the public `/indices`
   endpoint, sticky at top, above the masthead on every page (incl. login)
 - **Final navigation structure:** a persistent full-height left sidebar with
-  the "Uptick" wordmark and exactly two nav items (Watchlist, Market Radar),
-  each an icon + label with a soft amber-tint highlight for the active view;a tagline at the bottom ("Know what moves, and why."). Page switching is plain
+  the "TRADEYE" wordmark and exactly two nav items (Watchlist, Market Radar),
+  each an icon + label with a soft amber-tint highlight for the active view;a tagline at the bottom ("An extra eye on the market."). Page switching is plain
   React state (`activeView: 'watchlist' | 'radar'`), no routing library. A
   circular avatar with the first letter of the user's email sits top-right next
   to Log out. Watchlist is the table view; Market Radar is a full-width page
@@ -790,7 +791,7 @@ build environment could not render/screenshot it.
   (`403 cross_origin_forbidden`), tested in `e2e.test.js` (test 10/10b).
 
 ### 7. Light-theme redesign + ticker strip + sparkline — DONE (2026-09-05)
-A full visual redesign to the light "Uptick" look plus the table restructure,
+A full visual redesign to the light "TRADEYE" look plus the table restructure,
 all in commit `c20eac9`'s successor (`003` migration + frontend). No backend
 behavior changed beyond the additive pieces described here:
 - **Migration `003_indices_and_sparkline.sql`:** `baseline.sparkline_closes`
