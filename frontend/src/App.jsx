@@ -142,48 +142,52 @@ export function App() {
           <div className="banner banner--error">Can't reach the server. Retrying…</div>
         )}
 
-        <main>
-          {authed === null && items === null && !connectionError && (
-            <div className="state state--loading">Loading your watchlist…</div>
-          )}
+        <div className="layout">
+          <aside className="sidebar">
+            <MarketRadar onAdd={handleAdd} />
+          </aside>
 
-          <MarketRadar onAdd={handleAdd} />
+          <main>
+            {authed === null && items === null && !connectionError && (
+              <div className="state state--loading">Loading your watchlist…</div>
+            )}
 
-          {items !== null && items.length === 0 && (
-            <div className="state state--empty">
-              <p>Nothing here yet.</p>
-              <p className="state__hint">Add a stock below to start tracking what changes.</p>
-            </div>
-          )}
+            {items !== null && items.length === 0 && (
+              <div className="state state--empty">
+                <p>Nothing here yet.</p>
+                <p className="state__hint">Add a stock below to start tracking what changes.</p>
+              </div>
+            )}
 
-          {items !== null && items.length > 0 && (
-            <table className="wl-table">
-              <thead>
-                <tr>
-                  <th>Stock</th>
-                  <th>Price</th>
-                  <th>Change</th>
-                  <th>Volume vs Avg</th>
-                  <th>Signal</th>
-                  <th>Last 7 Days</th>
-                  <th></th>
-                </tr>
-              </thead>
-              <tbody>
-                {items.map((item, i) => (
-                  <WatchlistRow
-                    key={item.symbol}
-                    item={item}
-                    featured={i === 0 && item.diff?.isMeaningful}
-                    onAck={handleAck}
-                    onRemove={handleRemove}
-                    busy={busySymbol === item.symbol}
-                  />
-                ))}
-              </tbody>
-            </table>
-          )}
-        </main>
+            {items !== null && items.length > 0 && (
+              <table className="wl-table">
+                <thead>
+                  <tr>
+                    <th>Stock</th>
+                    <th>Price</th>
+                    <th>Change</th>
+                    <th>Volume vs Avg</th>
+                    <th>Signal</th>
+                    <th>Last 7 Days</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {items.map((item, i) => (
+                    <WatchlistRow
+                      key={item.symbol}
+                      item={item}
+                      featured={i === 0 && item.diff?.isMeaningful}
+                      onAck={handleAck}
+                      onRemove={handleRemove}
+                      busy={busySymbol === item.symbol}
+                    />
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </main>
+        </div>
 
         <AddSymbolForm onAdd={handleAdd} />
       </div>

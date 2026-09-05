@@ -7,9 +7,22 @@
 }
 
 .page {
-  max-width: 860px;
+  max-width: 1120px;
   margin: 0 auto;
   padding: 3rem 1.5rem 6rem;
+}
+
+/* Two-column app body: Market Radar lives in the left sidebar, watchlist in main. */
+.layout {
+  display: grid;
+  grid-template-columns: 300px minmax(0, 1fr);
+  gap: 2.5rem;
+  align-items: start;
+}
+
+.sidebar {
+  position: sticky;
+  top: 3.5rem; /* clears the sticky ticker strip */
 }
 
 /* ---- Ticker strip ---- */
@@ -22,7 +35,7 @@
 }
 
 .ticker__inner {
-  max-width: 860px;
+  max-width: 1120px;
   margin: 0 auto;
   display: flex;
   gap: 0;
@@ -568,7 +581,33 @@
   display: flex;
   align-items: center;
   gap: 0.6rem;
+  width: 100%;
   margin-bottom: 0.9rem;
+  padding: 0;
+  background: none;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+}
+
+.radar__head:hover .radar__title {
+  color: var(--accent);
+}
+
+.radar__chevron {
+  width: 0;
+  height: 0;
+  border-left: 5px solid transparent;
+  border-right: 5px solid transparent;
+  border-top: 6px solid var(--muted);
+  transition: transform 0.15s ease;
+  flex-shrink: 0;
+}
+
+.radar__chevron--open {
+  transform: rotate(180deg);
 }
 
 .radar__title {
@@ -608,7 +647,7 @@
 
 .radar__grid {
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
+  grid-template-columns: 1fr; /* single-column stack in the sidebar */
   gap: 0.75rem;
 }
 
@@ -751,6 +790,16 @@
 }
 
 /* ---- Mobile responsive ---- */
+@media (max-width: 900px) {
+  .layout {
+    grid-template-columns: 1fr;
+    gap: 2rem;
+  }
+  .sidebar {
+    position: static;
+  }
+}
+
 @media (max-width: 640px) {
   .ticker__item {
     padding: 0.5rem 1rem;
@@ -771,8 +820,5 @@
   }
   .wl-table td {
     padding: 0.6rem 0.5rem;
-  }
-  .radar__grid {
-    grid-template-columns: 1fr;
   }
 }

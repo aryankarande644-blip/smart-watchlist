@@ -45,6 +45,7 @@ function badgeClass(label) {
 export function MarketRadar({ onAdd }) {
   const [items, setItems] = useState(null); // null = loading
   const [busySymbol, setBusySymbol] = useState(null);
+  const [expanded, setExpanded] = useState(true); // sidebar panel starts open
   const timer = useRef(null);
 
   const refresh = async () => {
@@ -104,20 +105,28 @@ export function MarketRadar({ onAdd }) {
 
   return (
     <section className="radar" aria-label="Market Radar">
-      <div className="radar__head">
-        <h2 className="radar__title">Market Radar</h2>
+      <button
+        type="button"
+        className="radar__head"
+        onClick={() => setExpanded((e) => !e)}
+        aria-expanded={expanded}
+      >
+        <span className={`radar__chevron${expanded ? ' radar__chevron--open' : ''}`} aria-hidden="true" />
+        <span className="radar__title">Market Radar</span>
         <span className="radar__live"><span className="radar__dot" /> Live</span>
-      </div>
-      {empty && (
-        <div className="state state--empty">
-          <p>No unusual movement right now.</p>
-          <p className="state__hint">
-            Check back after market hours or Monday's open for the latest movers.
-          </p>
-        </div>
-      )}
-      {loading && <div className="state state--loading">Gathering radar…</div>}
-      <div className="radar__grid">
+      </button>
+      {expanded && (
+        <>
+          {empty && (
+            <div className="state state--empty">
+              <p>No unusual movement right now.</p>
+              <p className="state__hint">
+                Check back after market hours or Monday's open for the latest movers.
+              </p>
+            </div>
+          )}
+          {loading && <div className="state state--loading">Gathering radar…</div>}
+          <div className="radar__grid">
         {(items === null ? [] : items).map((item, i) => {
           const direction = item.changePct > 0 ? 'up' : item.changePct < 0 ? 'down' : '';
           const why = item.badge?.why;
@@ -155,7 +164,9 @@ export function MarketRadar({ onAdd }) {
             </article>
           );
         })}
-      </div>
+          </div>
+        </>
+      )}
     </section>
   );
 }
