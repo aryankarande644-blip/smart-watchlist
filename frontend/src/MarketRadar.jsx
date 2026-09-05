@@ -95,11 +95,12 @@ export function MarketRadar({ onAdd }) {
     }
   }
 
-  // Render a quiet shell when no movers are currently flagged (e.g. market
-  // quiet / no data despite this being the radar's whole point).
-  if (items !== null && items.length === 0) {
-    return null;
-  }
+  // Always render the section with a heading so the "Market Radar" UI is
+  // discoverable. When no movers are currently flagged (market quiet, no
+  // data, or after hours), show a clear empty-state message instead of
+  // disappearing entirely — mirroring the watchlist's empty behavior.
+  const empty = items !== null && items.length === 0;
+  const loading = items === null;
 
   return (
     <section className="radar" aria-label="Market Radar">
@@ -107,6 +108,15 @@ export function MarketRadar({ onAdd }) {
         <h2 className="radar__title">Market Radar</h2>
         <span className="radar__live"><span className="radar__dot" /> Live</span>
       </div>
+      {empty && (
+        <div className="state state--empty">
+          <p>No unusual movement right now.</p>
+          <p className="state__hint">
+            Check back after market hours or Monday's open for the latest movers.
+          </p>
+        </div>
+      )}
+      {loading && <div className="state state--loading">Gathering radar…</div>}
       <div className="radar__grid">
         {(items === null ? [] : items).map((item, i) => {
           const direction = item.changePct > 0 ? 'up' : item.changePct < 0 ? 'down' : '';
