@@ -5,6 +5,7 @@ import { WatchlistRow } from './WatchlistRow';
 import { AddSymbolForm } from './AddSymbolForm';
 import { AuthPage } from './AuthPage';
 import { TickerStrip } from './TickerStrip';
+import { MarketRadar } from './MarketRadar';
 
 // Configurable via VITE_POLL_INTERVAL_MS (ms); default 20s. Env-driven so
 // the interval can be tuned without a code change.
@@ -145,6 +146,8 @@ export function App() {
           {authed === null && items === null && !connectionError && (
             <div className="state state--loading">Loading your watchlist…</div>
           )}
+
+          <MarketRadar onAdd={handleAdd} />
 
           {items !== null && items.length === 0 && (
             <div className="state state--empty">

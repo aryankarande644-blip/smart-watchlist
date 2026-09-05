@@ -201,6 +201,33 @@ async function getDistinctWatchedSymbols() {
   return rows.map((r) => r.symbol);
 }
 
+// Radar data: latest snapshot + baseline (volatility/avgVolume/sparkline) for
+// a given set of symbols, WITHOUT any per-user notion. The radar compares a
+// symbol's current move against its own recent baseline (market-wide "what's
+// moving now"), not against a user's last_seen. Only symbols with a live
+// (non-null) snapshot AND a computable baseline are worth scoring.
+async function getRadarData(symbols) {
+  if (!symbols || symbols.length === 0) return [];
+  const { rows } = await pool.query(
+    `SELECT
+       s.symbol,
+       s.price AS current_price,
+       s.volume AS current_volume,
+       s.fetched_at AS snapshot_fetched_at,
+       s.is_stale,
+       s.market_closed,
+       b.status AS baseline_status,
+       b.typical_daily_volatility,
+       b.avg_volume,
+       b.sparkline_closes
+     FROM snapshot s
+     JOIN baseline b ON b.symbol = s.symbol
+     WHERE s.symbol = ANY($1)`,
+    [symbols]
+  );
+  return rows;
+}
+
 // ---- Index quotes (the top ticker strip's cache, written only by the poller) ----
 
 // Indices never enter snapshot/baseline (those are FK-bound to watchable
@@ -292,6 +319,7 @@ module.exports = {
   markSnapshotStale,
   getSnapshot,
   getDistinctWatchedSymbols,
+  getRadarData,
   upsertIndexQuote,
   markIndexQuoteStale,
   getIndexQuote,

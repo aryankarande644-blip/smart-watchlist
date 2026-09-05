@@ -559,6 +559,197 @@
   text-decoration: underline;
 }
 
+/* ---- Market Radar ---- */
+.radar {
+  margin: 1rem 0 2.5rem;
+}
+
+.radar__head {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin-bottom: 0.9rem;
+}
+
+.radar__title {
+  margin: 0;
+  font-size: 1.125rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+
+.radar__live {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.625rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--up);
+  padding: 0.2rem 0.5rem;
+  border: 1px solid #bbf7d0;
+  background: #f0fdf4;
+  border-radius: 99px;
+}
+
+.radar__dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--up);
+  animation: radar-pulse 2s ease-in-out infinite;
+}
+
+@keyframes radar-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+
+.radar__grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 0.75rem;
+}
+
+.radar__card {
+  background: var(--surface);
+  border: 1px solid var(--hairline);
+  border-radius: 10px;
+  padding: 0.9rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.radar__card-head {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.radar__rank {
+  font-size: 0.6875rem;
+  font-weight: 700;
+  color: var(--muted);
+  min-width: 1.1rem;
+}
+
+.radar__stock {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  flex: 1;
+}
+
+.radar__symbol {
+  font-weight: 700;
+  font-size: 0.9375rem;
+  letter-spacing: 0.01em;
+}
+
+.radar__exchange {
+  font-size: 0.625rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.radar__badge {
+  font-size: 0.5625rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  padding: 0.18rem 0.45rem;
+  border-radius: 99px;
+  white-space: nowrap;
+  background: var(--surface);
+  color: var(--muted);
+  border: 1px solid var(--hairline);
+}
+
+.radar__badge--spike {
+  background: #fef3c7;
+  color: var(--accent);
+  border: 1px solid #fde68a;
+}
+
+.radar__badge--up {
+  background: #dcfce7;
+  color: var(--up);
+  border: 1px solid #bbf7d0;
+}
+
+.radar__badge--down {
+  background: #fee2e2;
+  color: var(--down);
+  border: 1px solid #fecaca;
+}
+
+.radar__badge--breakout {
+  background: var(--surface);
+  color: var(--ink);
+  border: 1px solid var(--hairline);
+}
+
+.radar__price-row {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+}
+
+.radar__price {
+  font-weight: 700;
+  font-size: 1.0625rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.radar__change {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.radar__price.up, .radar__change.up { color: var(--up); }
+.radar__price.down, .radar__change.down { color: var(--down); }
+
+.radar__meta {
+  font-size: 0.6875rem;
+  color: var(--muted);
+}
+
+.radar__why {
+  font-size: 0.75rem;
+  color: var(--muted);
+  font-style: italic;
+  line-height: 1.35;
+}
+
+.radar__spark {
+  margin-top: auto;
+  padding-top: 0.25rem;
+}
+
+.radar__add {
+  margin-top: 0.25rem;
+  padding: 0.4rem 0.6rem;
+  border: 1px solid var(--hairline);
+  border-radius: 6px;
+  background: var(--paper);
+  color: var(--ink);
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.radar__add:hover {
+  border-color: var(--ink);
+}
+
+.radar__add:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
 /* ---- Mobile responsive ---- */
 @media (max-width: 640px) {
   .ticker__item {
@@ -580,5 +771,8 @@
   }
   .wl-table td {
     padding: 0.6rem 0.5rem;
+  }
+  .radar__grid {
+    grid-template-columns: 1fr;
   }
 }

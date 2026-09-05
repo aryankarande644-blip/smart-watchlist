@@ -2,6 +2,7 @@
 const pool = require('../db/pool');
 const repo = require('../db/repository');
 const { createPoller, isMarketOpenNowIST } = require('../poller/poller');
+const { RADAR_UNIVERSE } = require('../marketData/radarUniverse');
 
 let passed = 0, failed = 0;
 function assertTrue(name, condition, detail) {
@@ -244,6 +245,48 @@ async function run() {
     }
 
     assertTrue('4. A DB outage during a cycle does NOT throw out of runCycle (process stays alive)', threw === false, threw);
+  }
+
+  // ---- Test 6: the radar universe is merged into the SAME cycle, and a
+  // symbol present in BOTH the radar universe and a watchlist is fetched
+  // exactly once per cycle (the dedupe that prevents double-fetching) ----
+  {
+    await resetDb();
+
+    // Pick a real radar-universe symbol, e.g. INFY, and add it to a watchlist
+    // so it's both in RADAR_UNIVERSE AND a watchlist. Also add a non-universe
+    // symbol to prove watchlist-only symbols still poll.
+    const user = await makeUser();
+    await repo.ensureBaselineExists('INFY');
+    await repo.addToWatchlist(user.id, 'INFY');
+    await repo.ensureBaselineExists('MYUNIQUE');
+    await repo.addToWatchlist(user.id, 'MYUNIQUE');
+
+    const fetchCounts = {};
+    const countingClient = {
+      async fetchQuote(symbol) {
+        fetchCounts[symbol] = (fetchCounts[symbol] || 0) + 1;
+        return { price: 100, volume: 5000 };
+      },
+    };
+    const poller = createPoller({ marketDataClient: countingClient, logger: silentLogger, isMarketOpenFn: () => true });
+    await poller.runCycle();
+
+    // INFY is in the universe AND on a watchlist -> must be fetched once only.
+    assertTrue('6a. Universe+watchlist overlap symbol (INFY) fetched exactly once', fetchCounts.INFY === 1, fetchCounts.INFY);
+    // The watchlist-only symbol still fetched once.
+    assertTrue('6b. Watchlist-only symbol still fetched once', fetchCounts.MYUNIQUE === 1, fetchCounts.MYUNIQUE);
+    // And universe symbols that aren't watched also get polled (so the radar
+    // has data) — verify at least a few universe members were fetched.
+    const universeFetched = RADAR_UNIVERSE.filter((s) => fetchCounts[s]).length;
+    assertTrue('6c. Other radar-universe symbols were also polled (radar has data)', universeFetched >= 5, { universeFetched, total: RADAR_UNIVERSE.length });
+    // The SAME cycle also polls the ticker indices (NIFTY/SENSEX) through the
+    // same fetchQuote path — so total fetches = distinct equities (universe ∪
+    // watchlist = 20 + 1) + 2 indices. What matters is that NOTHING is fetched
+    // more than once: the overlap symbol INFY is a member of both sets but the
+    // merge dedupes it, so no double-fetch.
+    assertTrue('6d. No symbol fetched more than once (dedupe holds globally)', Object.values(fetchCounts).every((n) => n === 1), fetchCounts);
+    assertTrue('6e. Total fetches == universe ∪ watchlist + 2 indices, exactly once each', Object.keys(fetchCounts).length === (RADAR_UNIVERSE.length + 1 + 2), { got: Object.keys(fetchCounts).length, expected: RADAR_UNIVERSE.length + 3 });
   }
 
   console.log(`\n${passed} passed, ${failed} failed`);

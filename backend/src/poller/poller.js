@@ -1,6 +1,7 @@
 // src/poller/poller.js
 const repo = require('../db/repository');
 const { INDEX_SYMBOLS } = require('../marketData/indexSymbols');
+const { RADAR_UNIVERSE } = require('../marketData/radarUniverse');
 
 // NSE trading window, IST. Kept simple and explicit per the decision to
 // hardcode a static holiday list rather than call a live calendar API.
@@ -60,7 +61,16 @@ function createPoller({ marketDataClient, intervalMs = 30000, logger = console, 
 
     try {
       const marketOpen = isMarketOpenFn();
-      const symbols = await repo.getDistinctWatchedSymbols();
+      // Merge the radar universe into the SAME symbols list the poller
+      // already walks. Deduping matters: a symbol can be both in the radar
+      // universe AND on someone's watchlist — it must be fetched exactly
+      // once per cycle, not twice. One shared, already-tested resilience
+      // path (per-symbol isolation + circuit breaker) serves both surfaces;
+      // this is the deliberate design, recorded in HANDOFF §6 / §10 item 8.
+      const symbols = [...new Set([
+        ...(await repo.getDistinctWatchedSymbols()),
+        ...RADAR_UNIVERSE,
+      ])];
 
       if (!marketOpen) {
         // Market closed: don't poll, just flag existing snapshots as

@@ -6,6 +6,7 @@ const cors = require('cors');
 const { sessionMiddleware } = require('./routes/session');
 const { createAuthRouter } = require('./routes/auth');
 const createWatchlistRouter = require('./routes/watchlist');
+const { createRadarRouter } = require('./routes/radar');
 const { createHealthRouter } = require('./routes/health');
 const { createIndicesRouter } = require('./routes/indices');
 const { createMarketDataClient } = require('./marketData/client');
@@ -51,6 +52,7 @@ function createApp({ marketDataClient, poller, authOptions = {} }) {
 
   app.use('/auth', createAuthRouter(authOptions));
   app.use(createWatchlistRouter({ marketDataClient }));
+  app.use(createRadarRouter());
 
   // Central error handler — every route's `next(err)` lands here.
   app.use((err, req, res, next) => {

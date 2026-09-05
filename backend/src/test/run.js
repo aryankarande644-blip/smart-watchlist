@@ -9,6 +9,8 @@ const suites = [
   'src/test/poller.test.js',
   'src/test/refreshBaselines.test.js',
   'src/test/auth.test.js',
+  'src/test/radarBadge.test.js',
+  'src/test/radar.e2e.test.js',
   'src/test/e2e.test.js',
 ];
 for (const suite of suites) {

@@ -28,6 +28,7 @@ async function request(path, options = {}) {
 export const api = {
   getWatchlist: () => request('/watchlist'),
   getIndices: () => request('/indices'),
+  getRadar: () => request('/radar'),
   addSymbol: (symbol) =>
     request('/watchlist', { method: 'POST', body: JSON.stringify({ symbol }) }),
   removeSymbol: (symbol) =>

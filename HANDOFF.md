@@ -252,14 +252,39 @@ GET /health
   -> 503 { status: 'degraded', ... }   -- if DB unreachable OR circuit breaker open
 
 GET /indices   -- public (mounted before session middleware, like /health);
-               -- powers the top ticker strip. Reads the poller's cache.
+                -- powers the top ticker strip. Reads the poller's cache.
   -> 200 { indices: [
       { symbol: 'NIFTY'|'SENSEX', label: string, price: number|null,
         fetchedAt: ISOString, isStale: boolean, marketClosed: boolean }
     ] }
+
+GET /radar   -- requires a session (user-specific: it excludes the requesting
+              user's own watchlist symbols). Auth same as /watchlist.
+              Reads the poller-cached snapshot+baseline tables; pure
+              per-request computation, WRITES nothing.
+  -> 200 { items: [   -- at most 5, sorted by abs(diff.finalScore) descending
+      { symbol: string,
+        currentPrice: number | null,
+        changePct: number | null,        -- % vs the symbol's own last close
+                                           (last sparkline_closes point) — the
+                                           radar's "moving right now" reference
+        previousClose: number | null,    -- that reference price
+        currentVolume: number | null,
+        avgVolume: number | null,
+        sparklineCloses: number[] | null, -- bounded <=7 closes, reused for card
+        diff: { finalScore, isMeaningful, direction, confidenceMultiplier, ... },
+        badge: { label, why } | null      -- label: one of 'Volume Spike' |
+                                           'Strong Move' | 'High Volatility' |
+                                           'High Activity' | 'Near Breakout'
+      }
+    ] }
+  -> 401 { error: { code: 'not_authenticated' } }
+
+POST /watchlist   -- the radar's per-card "Add to watchlist" button reuses
+              this exact endpoint; no radar-specific write path exists.
 ```
 
-Files: `backend/src/routes/watchlist.js`, `backend/src/routes/health.js`
+Files: `backend/src/routes/watchlist.js`, `backend/src/routes/health.js`, `backend/src/routes/radar.js`
 
 ---
 
@@ -385,6 +410,32 @@ ad-hoc frontend bypass of the upstream) and caches results in `index_quote`.
 `GET /indices` is public. Volume/avg-volume and the sparkline were added to
 the `/watchlist` items for the table without touching the diff engine.
 
+### Market Radar reuses the ONE poller / circuit-breaker — never a second one
+The Market Radar (`GET /radar`, 2026-09-05) is deliberately **not** a second
+parallel poller with its own failure modes. Its curated universe
+(`marketData/radarUniverse.js`, a fixed ~20-22 liquid NSE large-caps) is
+merged into the *existing* 30-second poll cycle via
+`[...new Set([...watchedSymbols, ...RADAR_UNIVERSE])]` — so a symbol present in
+BOTH the universe and someone's watchlist is fetched **exactly once** per
+cycle, and every radar symbol gets a fresh snapshot through the same
+per-symbol isolation, market-hours awareness, overlap guard and circuit
+breaker the watchlist already trusts. No second resilience surface was added.
+The radar endpoint itself is pure per-request computation from those cached
+snapshot+baseline tables (it WRITES nothing); only the "Add to watchlist"
+button on each card hits `POST /watchlist` (which then seeds its own baseline).
+**Radar scoring is stateless per-user by design** — there's no last_seen for
+"right now, market-wide" moves. Each symbol is scored against its own recent
+baseline using the existing `computeDiff`, with the previous reference taken
+from the symbol's own last completed close (the final `sparkline_closes`
+point) so the card shows a real day-over-close change % and
+`abs(finalScore)` reuses the meaningful-threshold semantics. Badge mapping is
+a thin, pure read of existing diff fields (`radar/badge.js`), not new
+computation. Tradeoffs of reusing the single poller: the universe adds ~20
+upstream quotes per cycle and the radar can only surface movers that have a
+ready baseline (roughly the 20-day lookback window after first fetch) — both
+accepted. It is user-specific (must exclude the requesting user's watchlist),
+so it sits behind the same auth middleware as `/watchlist`.
+
 ### Deployment topology, decided by what the poller requires
 The poller is a long-running background loop — this rules out serverless
 functions (Vercel/Netlify functions, AWS Lambda), which spin up per-request
@@ -490,17 +541,22 @@ backend/
       refreshBaselines.js       -- daily off-market recompute job (Section 10 #4), 11 tests
     marketData/
       indexSymbols.js           -- NIFTY 50 -> ^NSEI, SENSEX -> ^BSESN (index vs .NS mapping)
+      radarUniverse.js          -- Market Radar's fixed curated universe (~20 liquid NSE large-caps)
       client.js                 -- retry/backoff + circuit breaker, provider-agnostic
       demoProvider.js            -- explicit simulated-data fallback (incl. indices)
       realProvider.js             -- yahoo-finance2 backed, LIVE-verified (incl. ^NSEI/^BSESN)
     poller/
       poller.js                 -- per-symbol isolated, overlap-guarded, market-hours + real 2026 NSE holidays,
-                                --    also polls headline indices each cycle
+                                --    also polls headline indices AND the radar universe each cycle (deduped once)
+    radar/
+      badge.js                  -- pure diff-field -> badge label + one-line "why" (Volume Spike / Strong
+                                --    Move / High Volatility / High Activity / Near Breakout)
     routes/
       session.js                 -- session cookie resolve-only middleware (+ sign/verify/issue/clear; versioned payload)
       auth.js                    -- signup / login / logout, login rate-limited per IP
       watchlist.js                -- GET/POST/DELETE/ack, live symbol validation, 401-guarded
       indices.js                  -- public GET /indices for the top ticker strip
+      radar.js                    -- GET /radar (401-guarded): top 5 movers, excludes user's watchlist
       health.js                   -- DB + poller + circuit status
     test/
       diffEngine.test.js          -- 17 tests
@@ -508,9 +564,11 @@ backend/
       realProvider.test.js          -- 35 tests (incl. ^NSEI/^BSESN mapping, direct-fallback)
       repository.test.js             -- 13 tests (real Postgres)
       marketDataClient.test.js        -- 19 tests
-      poller.test.js                   -- 17 tests (incl. index polling open/closed)
+      poller.test.js                   -- 23 tests (incl. index polling + radar-universe merge/dedupe)
       refreshBaselines.test.js           -- 11 tests (real Postgres, deterministic schedule math)
       auth.test.js                        -- 13 tests
+      radarBadge.test.js                    -- 13 tests (pure badge-mapping cases + boundaries)
+      radar.e2e.test.js                     -- 8 tests (exclusion, top-5 sort, badge mapping, 401)
       e2e.test.js                       -- 35 tests (real HTTP server + Postgres, incl. /indices + table fields)
       run.js                             -- runs all suites in sequence
 
@@ -524,7 +582,8 @@ frontend/
     api.js                          -- thin fetch client matching Section 5 exactly
     TickerStrip.jsx                 -- top sticky NIFTY/SENSEX strip (public /indices)
     WatchlistRow.jsx                 -- table row: Stock/Price/Change/Volume/Signal/Sparkline
-    Sparkline.jsx                    -- inline SVG "Last 7 Days" sparkline
+    MarketRadar.jsx                  -- Market Radar card grid above the table (+ one-click add)
+    Sparkline.jsx                    -- inline SVG "Last 7 Days" sparkline (shared by table + radar)
     AddSymbolForm.jsx                 -- debounced add, inline errors
     AuthPage.jsx                       -- login/signup (light restyle)
     ErrorBoundary.jsx                  -- React error boundary
@@ -749,6 +808,49 @@ behavior changed beyond the additive pieces described here:
   reserved for the single most-meaningful row, restyled auth/empty/disclaimer.
 - Verified: full suite green (172 tests), production build clean, and (in
   the deploy pass) live HTTP checks on Render + Vercel.
+
+### 8. Market Radar — DONE (2026-09-05)
+The "Market Radar" section: top movers from a fixed curated universe of
+liquid NSE large-caps, shown above the watchlist table. This was built as a
+deliberate resilience exercise — reuse, don't fork:
+- **`marketData/radarUniverse.js`:** ~20 fixed liquid NSE symbols (RELIANCE,
+  TCS, HDFCBANK, INFY, ICICIBANK, SBIN, HINDUNILVR, ITC, BHARTIARTL,
+  KOTAKBANK, LT, AXISBANK, ASIANPAINT, MARUTI, WIPRO, SUNPHARMA, TITAN,
+  ULTRACEMCO, BAJFINANCE, NESTLEIND). CEAT deliberately absent (see §8 bug #12
+  for the Yahoo data quirk).
+- **Poller:** the universe is merged into the SAME 30-second cycle as watched
+  symbols via `[...new Set([...distinctWatched, ...RADAR_UNIVERSE])]`, so an
+  overlap symbol (both watched and in the universe) is fetched exactly once
+  per cycle. All existing resilience (per-symbol isolation, overlap guard,
+  circuit breaker) applies with zero new surface. See the §6 architecture
+  decision above.
+- **`GET /radar`** (401-guarded like `/watchlist`, since it's user-specific):
+  scores each universe symbol against its OWN baseline via the existing
+  `computeDiff`, referencing the symbol's last completed close (final
+  sparkline point) as the prior — no per-user last_seen. Returns the top 5 by
+  `abs(finalScore)` descending, each with symbol, current price, day-over-
+  close change %, volume vs avg, the shared 7-day sparkline, and a
+  `badge { label, why }`.
+- **`radar/badge.js`:** pure read of existing diff fields — no new
+  computation:
+  - `isMeaningful` + `confidenceMultiplier > 1.3` → **Volume Spike**
+    ("Above average volume")
+  - `isMeaningful` + `direction === 'up'` → **Strong Move**
+  - `isMeaningful` + `direction === 'down'` → **High Volatility**
+  - `1.0 <= abs(finalScore) < 1.5` → **Near Breakout**
+  - otherwise no badge (not a mover)
+- **Frontend `MarketRadar.jsx`:** "Market Radar" heading + "Live" indicator
+  (pulse dot, tile styling variant of the ticker strip), a 5-across card grid
+  (stacks to 1 column on narrow screens) with rank, symbol, NSE label, badge,
+  price, change %, volume-vs-avg line, one-line "why", sparkline, and a
+  "+ Add to watchlist" button that hits the existing `POST /watchlist`.
+- **Tests:** `radarBadge.test.js` (13) covers all four badge cases + the
+  1.3-and-1.0/1.5 boundaries + stale/no-badge guards; `radar.e2e.test.js`
+  (8) covers watchlist exclusion, at-most-5 + sort-by-abs-score, badge
+  mapping from a seeded deterministic universe, field shape, and 401;
+  `poller.test.js` gained the merge/dedupe test (both-lists symbol fetched
+  exactly once, indices counted separately). Full suite: **199 tests, 0
+  failures.** Frontend production build clean.
 
 ---
 
