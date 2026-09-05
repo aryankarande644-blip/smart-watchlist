@@ -546,12 +546,17 @@ snapshot, baseline, users CASCADE`), re-verified live end-to-end:
 - **B.** `https://smart-watchlist.vercel.app` still serves a STALE build
   (no `VITE_API_BASE_URL` baked in — its `/watchlist` calls 404 on
   Vercel). The live build is on the `smart-watchlist-hazel` alias.
-  Retire/deploy-over the bare alias so nobody lands on the broken build.
+  **Requires a Vercel dashboard action (no CLI/token was available in the
+  build environment):** in Vercel, delete the old deployment/project that
+  owns the `smart-watchlist.vercel.app` alias (or repoint that alias to
+  the current build). Done correctly, `curl https://smart-watchlist.vercel.app/`
+  should serve the same `index-CXxlgvM5.js` bundle as the hazel URL.
 - **C.** ~~Anonymous session bloat from cookie-less `/health` polling
-  (~17k rows/day).~~ **RESOLVED (this commit):** `/health` is now
-  registered *before* the session middleware in `server.js`, so health
-  pings mint no session and no `users` row. Verified locally (6 `/health`
-  hits -> 0 user rows, session flow intact) and 104/104 tests pass.
+  (~17k rows/day).~~ **RESOLVED + VERIFIED LIVE (2026-09-05):** `/health`
+  is registered *before* the session middleware in `server.js`, so health
+  pings mint no session and no `users` row. Verified live on Render: the
+  `users` count was flat at 310 across a 60s window that previously grew
+  ~15 rows/min.
 - **D.** External keep-alive monitor at `/health` (DEPLOYMENT.md final
   runbook step) — confirm it's still in place so the free Render instance
   stays awake.
