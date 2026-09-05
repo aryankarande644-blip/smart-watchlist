@@ -110,6 +110,7 @@ export function App() {
 
   async function handleAuthenticated(email) {
     if (email) setUserEmail(email);
+    setActiveView('watchlist'); // fresh login always starts on the Watchlist view
     await refresh();
   }
 

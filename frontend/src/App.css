@@ -901,13 +901,13 @@
 @media (max-width: 640px) {
   :root {
     --ticker-h: 36px;
-    --side-w: 200px;
+    --side-w: 176px;
   }
   .side-nav {
     padding: 1.25rem 0.75rem 1rem;
   }
   .side-nav__brand {
-    font-size: 1.375rem;
+    font-size: 1.25rem;
     padding: 0 0.5rem 1.25rem;
   }
   .side-nav__item {
@@ -921,6 +921,12 @@
   .content {
     padding: 1.5rem 1.25rem 5rem;
   }
+  .masthead__row {
+    flex-wrap: wrap;
+  }
+  .masthead__row h1 {
+    font-size: 1.5rem;
+  }
   .ticker__item {
     padding: 0.5rem 1rem;
     gap: 0.4rem;
@@ -933,6 +939,7 @@
   }
   .radar__meta-row {
     align-items: flex-start;
+    flex-wrap: wrap;
   }
   .wl-table {
     font-size: 0.8125rem;
