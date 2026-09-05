@@ -941,6 +941,10 @@
     align-items: flex-start;
     flex-wrap: wrap;
   }
+  .add-form input {
+    min-width: 0;
+    flex: 1 1 0;
+  }
   .wl-table {
     font-size: 0.8125rem;
   }
