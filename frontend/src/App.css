@@ -25,6 +25,13 @@
   top: 3.5rem; /* clears the sticky ticker strip */
 }
 
+/* Grid children must be allowed to shrink below their content's min-width,
+   otherwise the wide watchlist table forces the whole layout (and sidebar)
+   wider than the viewport on phones. */
+.layout > main {
+  min-width: 0;
+}
+
 /* ---- Ticker strip ---- */
 .ticker {
   border-bottom: 1px solid var(--hairline);
@@ -157,6 +164,14 @@
 .state__hint {
   color: var(--muted) !important;
   font-size: 0.9375rem !important;
+}
+
+/* Decouples the table's intrinsic width from the page: on narrow screens the
+   wrapper scrolls horizontally, so the rest of the layout keeps viewport width. */
+.wl-scroll {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  max-width: 100%;
 }
 
 /* ---- Watchlist table ---- */

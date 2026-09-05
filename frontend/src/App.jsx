@@ -160,31 +160,33 @@ export function App() {
             )}
 
             {items !== null && items.length > 0 && (
-              <table className="wl-table">
-                <thead>
-                  <tr>
-                    <th>Stock</th>
-                    <th>Price</th>
-                    <th>Change</th>
-                    <th>Volume vs Avg</th>
-                    <th>Signal</th>
-                    <th>Last 7 Days</th>
-                    <th></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {items.map((item, i) => (
-                    <WatchlistRow
-                      key={item.symbol}
-                      item={item}
-                      featured={i === 0 && item.diff?.isMeaningful}
-                      onAck={handleAck}
-                      onRemove={handleRemove}
-                      busy={busySymbol === item.symbol}
-                    />
-                  ))}
-                </tbody>
-              </table>
+              <div className="wl-scroll">
+                <table className="wl-table">
+                  <thead>
+                    <tr>
+                      <th>Stock</th>
+                      <th>Price</th>
+                      <th>Change</th>
+                      <th>Volume vs Avg</th>
+                      <th>Signal</th>
+                      <th>Last 7 Days</th>
+                      <th></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {items.map((item, i) => (
+                      <WatchlistRow
+                        key={item.symbol}
+                        item={item}
+                        featured={i === 0 && item.diff?.isMeaningful}
+                        onAck={handleAck}
+                        onRemove={handleRemove}
+                        busy={busySymbol === item.symbol}
+                      />
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             )}
           </main>
         </div>
