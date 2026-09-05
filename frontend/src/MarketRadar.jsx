@@ -3,16 +3,17 @@ import { useEffect, useRef, useState } from 'react';
 import { api } from './api';
 import { Sparkline } from './Sparkline';
 
-// Market Radar: a public-at-the-market level "what's moving right now"
-// section. The backend computes the top 5 movers from a curated universe,
-// excluding anything the requesting user already watches, ranked by absolute
-// move score vs each symbol's own recent baseline. Each card carries the
-// badge + one-line "why" the backend derived, plus the same cached
-// last-7-days sparkline used by the watchlist table.
+// Market Radar: a full-page "what's moving right now" surface. The backend
+// computes the top 5 movers from the Nifty-50 universe, excluding anything
+// the requesting user already watches, ranked by absolute move score vs each
+// symbol's own recent baseline. Each card carries the badge + one-line "why"
+// the backend derived, plus the same cached last-7-days sparkline used by the
+// watchlist table.
 //
 // Fetch is stateless and cheap (reads the poller-cached snapshot/baseline
 // tables); it rides the same poll interval as the watchlist, pausing when
-// the tab is backgrounded.
+// the tab is backgrounded. The "last updated" line reuses the poller's
+// most-recent-successful-cycle timestamp exposed by /health.
 const RADAR_POLL_MS = Number(import.meta.env.VITE_POLL_INTERVAL_MS) || 20000;
 
 function formatPrice(price) {
@@ -32,6 +33,15 @@ function formatVolume(volume) {
   return volume.toLocaleString('en-IN');
 }
 
+function formatUpdated(iso) {
+  if (!iso) return '—';
+  return new Date(iso).toLocaleTimeString('en-IN', {
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  });
+}
+
 function badgeClass(label) {
   switch (label) {
     case 'Volume Spike': return 'radar__badge radar__badge--spike';
@@ -45,13 +55,18 @@ function badgeClass(label) {
 export function MarketRadar({ onAdd }) {
   const [items, setItems] = useState(null); // null = loading
   const [busySymbol, setBusySymbol] = useState(null);
-  const [expanded, setExpanded] = useState(true); // sidebar panel starts open
+  const [lastPolledAt, setLastPolledAt] = useState(null);
   const timer = useRef(null);
 
   const refresh = async () => {
     try {
-      const data = await api.getRadar();
-      setItems(data.items || []);
+      const [radar, health] = await Promise.all([api.getRadar(), api.getHealth()]);
+      setItems(radar.items || []);
+      // Timestamp of the poller's most recent successful cycle (null while
+      // the market is closed); we only ever move it forward.
+      if (health?.poller?.lastSuccessfulPollAt) {
+        setLastPolledAt(health.poller.lastSuccessfulPollAt);
+      }
     } catch (_) {
       // Keep last-known cards rather than wiping on transient errors. A 401
       // is handled upstream by the app-level auth flip.
@@ -96,37 +111,34 @@ export function MarketRadar({ onAdd }) {
     }
   }
 
-  // Always render the section with a heading so the "Market Radar" UI is
-  // discoverable. When no movers are currently flagged (market quiet, no
-  // data, or after hours), show a clear empty-state message instead of
-  // disappearing entirely — mirroring the watchlist's empty behavior.
+  // The page always renders; when no movers are currently flagged (market
+  // quiet, no data, or after hours) it shows a clear empty state instead of
+  // disappearing — mirroring the watchlist's empty behavior.
   const empty = items !== null && items.length === 0;
   const loading = items === null;
 
   return (
     <section className="radar" aria-label="Market Radar">
-      <button
-        type="button"
-        className="radar__head"
-        onClick={() => setExpanded((e) => !e)}
-        aria-expanded={expanded}
-      >
-        <span className={`radar__chevron${expanded ? ' radar__chevron--open' : ''}`} aria-hidden="true" />
-        <span className="radar__title">Market Radar</span>
+      <p className="radar__subtitle">
+        Top stocks from Nifty 50 (not in your watchlist) showing unusual activity right now.
+      </p>
+
+      <div className="radar__meta-row">
+        <span className="radar__updated">Last updated {formatUpdated(lastPolledAt)}</span>
         <span className="radar__live"><span className="radar__dot" /> Live</span>
-      </button>
-      {expanded && (
-        <>
-          {empty && (
-            <div className="state state--empty">
-              <p>No unusual movement right now.</p>
-              <p className="state__hint">
-                Check back after market hours or Monday's open for the latest movers.
-              </p>
-            </div>
-          )}
-          {loading && <div className="state state--loading">Gathering radar…</div>}
-          <div className="radar__grid">
+      </div>
+
+      {empty && (
+        <div className="state state--empty">
+          <p>No unusual movement right now.</p>
+          <p className="state__hint">
+            Check back after market hours or Monday's open for the latest movers.
+          </p>
+        </div>
+      )}
+      {loading && <div className="state state--loading">Gathering radar…</div>}
+
+      <div className="radar__grid">
         {(items === null ? [] : items).map((item, i) => {
           const direction = item.changePct > 0 ? 'up' : item.changePct < 0 ? 'down' : '';
           const why = item.badge?.why;
@@ -164,9 +176,11 @@ export function MarketRadar({ onAdd }) {
             </article>
           );
         })}
-          </div>
-        </>
-      )}
+      </div>
+
+      <p className="radar__note">
+        Market Radar shows opportunities outside your watchlist, using the same analysis you trust.
+      </p>
     </section>
   );
 }

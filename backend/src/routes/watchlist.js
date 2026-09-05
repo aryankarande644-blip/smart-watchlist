@@ -124,7 +124,7 @@ router.get('/watchlist', async (req, res, next) => {
       return scoreB - scoreA;
     });
 
-    res.json({ items });
+    res.json({ items, user: { email: req.userEmail } });
   } catch (err) {
     next(err);
   }

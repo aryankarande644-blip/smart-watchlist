@@ -37,7 +37,7 @@ export function AuthPage({ onAuthenticated }) {
       } else {
         await api.signup(email, password);
       }
-      onAuthenticated();
+      onAuthenticated(email);
     } catch (err) {
       setError(MESSAGES[err.code] || err.message || 'Something went wrong.');
     } finally {

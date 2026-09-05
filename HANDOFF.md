@@ -1,4 +1,4 @@
-# Smart Market Watchlist — Complete Build Handoff
+# Uptick — Smart Market Watchlist, Complete Build Handoff
 
 This document is self-contained. It assumes zero prior context. Read it top
 to bottom before touching code. Working, tested code already exists for
@@ -227,6 +227,9 @@ GET /watchlist
     ] }
   -- sorted by abs(finalScore) descending -- most-meaningful-first,
   -- items with no diff sort last
+  -- also returns user: { email } (the authenticated account's email; added
+  -- 2026-09-05 in the final nav pass so the frontend avatar can render its
+  -- initial even after a cold reload with a valid session cookie)
 
 POST /watchlist   body: { symbol: string }
   -> 201 { symbol, baselineTriggered: boolean }
@@ -466,24 +469,35 @@ as primary defense, plus `/health` honestly reporting
 | `market_closed` row | Trading hours ended | Badge, price still shown |
 | Meaningful change | `diff.isMeaningful === true` | Gold left-border highlight, "Mark seen" button appears |
 
-Design tokens (light "Pulse" theme, migration/redesign pass 2026-09-05 — the
-earlier dark ledger theme was replaced by a white background, near-black text,
-hairline borders, colored badges, and a persistent top ticker strip):
+Design tokens (light "Uptick" theme — the app was renamed from "Pulse" to
+"Uptick" in the final navigation pass 2026-09-05; the earlier dark ledger theme
+was replaced by a white background, near-black text, hairline borders, colored
+badges, and a persistent top ticker strip):
 - Background `#FFFFFF`, primary text `#1A1A1A`, secondary text `#6B7280`
 - Up `#16A34A` (green), down `#DC2626` (red)
-- Accent `#D97706` (amber) — reserved EXCLUSIVELY for the single most
-  meaningful row's highlight (featured row background + its Signal badge),
-  never decorative
+- Accent `#D97706` (amber) — used for the avatar initials, the active nav item's
+  soft tint (12% opacity), and reserved for the single most meaningful row's
+  highlight (featured row background + its Signal badge)
 - Hairline borders `#E5E7EB`, subtle surface `#F9FAFB` for inputs/active tab
 - Fraunces (serif) for the masthead/headline, Inter for everything else,
   `tabular-nums` on all price figures
 - Persistent top ticker strip (NIFTY 50, SENSEX) reads the public `/indices`
   endpoint, sticky at top, above the masthead on every page (incl. login)
-- Watchlist is now a table: Stock | Price | Change | Volume vs Avg | Signal |
+- **Final navigation structure:** a persistent full-height left sidebar with
+  the "Uptick" wordmark and exactly two nav items (Watchlist, Market Radar),
+  each an icon + label with a soft amber-tint highlight for the active view;a tagline at the bottom ("Know what moves, and why."). Page switching is plain
+  React state (`activeView: 'watchlist' | 'radar'`), no routing library. A
+  circular avatar with the first letter of the user's email sits top-right next
+  to Log out. Watchlist is the table view; Market Radar is a full-width page
+  (see section 9 / radar section below).
+- Watchlist is a table: Stock | Price | Change | Volume vs Avg | Signal |
   Last 7 Days. Signal badge derives from the existing diff.isMeaningful +
   direction. "Last 7 Days" is an inline SVG sparkline over `sparkline_closes`.
 - Polling pauses when tab backgrounded (Page Visibility API)
 - React ErrorBoundary wraps the whole app — one bad render can't blank the page
+- **Deliberately excluded, by design (not forgotten): no search bar** (there is
+  no real symbol-search backend endpoint; a static input would look broken) and
+  **no theme toggle** (the product is a single light theme).
 
 Files: `frontend/src/App.jsx`, `WatchlistRow.jsx`, `AddSymbolForm.jsx`,
 `ErrorBoundary.jsx`, `App.css`, `api.js`
@@ -578,11 +592,11 @@ frontend/
   index.html                      -- Fraunces + Inter font loading
   src/
     main.jsx                      -- entry, wraps App in ErrorBoundary
-    App.jsx                        -- polling loop, all states, visibility pause, watchlist table
+    App.jsx                        -- nav state (activeView), sidebar nav, avatar, watchlist table
     api.js                          -- thin fetch client matching Section 5 exactly
     TickerStrip.jsx                 -- top sticky NIFTY/SENSEX strip (public /indices)
     WatchlistRow.jsx                 -- table row: Stock/Price/Change/Volume/Signal/Sparkline
-    MarketRadar.jsx                  -- Market Radar card grid above the table (+ one-click add)
+    MarketRadar.jsx                  -- full-width Market Radar page: subtitle, last-updated (+ one-click add)
     Sparkline.jsx                    -- inline SVG "Last 7 Days" sparkline (shared by table + radar)
     AddSymbolForm.jsx                 -- debounced add, inline errors
     AuthPage.jsx                       -- login/signup (light restyle)
@@ -776,7 +790,7 @@ build environment could not render/screenshot it.
   (`403 cross_origin_forbidden`), tested in `e2e.test.js` (test 10/10b).
 
 ### 7. Light-theme redesign + ticker strip + sparkline — DONE (2026-09-05)
-A full visual redesign to the light "Pulse" look plus the table restructure,
+A full visual redesign to the light "Uptick" look plus the table restructure,
 all in commit `c20eac9`'s successor (`003` migration + frontend). No backend
 behavior changed beyond the additive pieces described here:
 - **Migration `003_indices_and_sparkline.sql`:** `baseline.sparkline_closes`
@@ -839,11 +853,25 @@ deliberate resilience exercise — reuse, don't fork:
   - `isMeaningful` + `direction === 'down'` → **High Volatility**
   - `1.0 <= abs(finalScore) < 1.5` → **Near Breakout**
   - otherwise no badge (not a mover)
-- **Frontend `MarketRadar.jsx`:** "Market Radar" heading + "Live" indicator
-  (pulse dot, tile styling variant of the ticker strip), a 5-across card grid
-  (stacks to 1 column on narrow screens) with rank, symbol, NSE label, badge,
-  price, change %, volume-vs-avg line, one-line "why", sparkline, and a
-  "+ Add to watchlist" button that hits the existing `POST /watchlist`.
+- **Frontend `MarketRadar.jsx`:** now a full-width page (in the final nav
+  pass the collapsible sidebar panel was removed — it renders only when
+  `activeView === 'radar'`). Keeps the "Live" indicator (pulse dot) and the
+  5-across card grid (stacks to 3 → 2 → 1 column responsively) with rank,
+  symbol, NSE label, badge, price, change %, volume-vs-avg line, one-line
+  "why", sparkline, and a "+ Add to watchlist" button that hits the existing
+  `POST /watchlist` (the added symbol drops out of the radar immediately).
+  **Three radar-only elements added in the final pass:**
+  1. A subtitle under the "Market Radar" heading — verbatim:
+     "Top stocks from Nifty 50 (not in your watchlist) showing unusual
+     activity right now."
+  2. A "Last updated" line in the radar meta row, sourced from the poller's
+     `lastSuccessfulPollAt` (fetched alongside the radar via `GET /health`);
+     shows "—" while no successful cycle has completed (e.g. market closed).
+  3. A bottom closing line — verbatim: "Market Radar shows opportunities
+     outside your watchlist, using the same analysis you trust."
+  The frontend fetches `GET /radar` + `GET /health` together on the shared
+  poll interval and pauses when the tab is backgrounded, mirroring the
+  watchlist behavior.
 - **Tests:** `radarBadge.test.js` (13) covers all four badge cases + the
   1.3-and-1.0/1.5 boundaries + stale/no-badge guards; `radar.e2e.test.js`
   (8) covers watchlist exclusion, at-most-5 + sort-by-abs-score, badge

@@ -29,6 +29,7 @@ export const api = {
   getWatchlist: () => request('/watchlist'),
   getIndices: () => request('/indices'),
   getRadar: () => request('/radar'),
+  getHealth: () => request('/health'),
   addSymbol: (symbol) =>
     request('/watchlist', { method: 'POST', body: JSON.stringify({ symbol }) }),
   removeSymbol: (symbol) =>

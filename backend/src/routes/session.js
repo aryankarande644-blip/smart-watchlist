@@ -95,6 +95,7 @@ async function sessionMiddleware(req, res, next) {
       const user = await repo.getUserById(session.userId);
       if (user && user.session_version === session.version) {
         req.userId = user.id;
+        req.userEmail = user.email;
       }
     }
     next();

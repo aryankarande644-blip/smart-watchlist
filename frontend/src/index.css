@@ -12,6 +12,11 @@
 
   --font-display: 'Fraunces', Georgia, serif;
   --font-ui: 'Inter', -apple-system, sans-serif;
+
+  --ticker-h: 39px;
+  --side-w: 248px;
+  --side-w-compact: 216px;
+  --accent-tint: rgba(217, 119, 6, 0.12);
 }
 
 * {
