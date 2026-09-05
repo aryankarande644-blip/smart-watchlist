@@ -43,14 +43,23 @@ async function computeBaselineForSymbol(symbol, marketDataClient, logger = conso
     const { typicalDailyVolatility, avgVolume } = computeVolatilityAndVolume(candles);
     const lowConfidence = candles.length < LOOKBACK_DAYS;
 
+    // Sparkline data: the last <=7 completed closing prices, captured here
+    // (before the candles are discarded) and stored on the baseline row.
+    // Bounded and always overwritten — never grows over time, and the
+    // frontend never needs to re-fetch history just to draw 7 dots.
+    const sparklineCloses = candles
+      .slice(-7)
+      .map((c) => Math.round(c.close * 100) / 100);
+
     await repo.markBaselineReady(symbol, {
       typicalDailyVolatility,
       avgVolume,
       historyDaysUsed: candles.length,
       lowConfidence,
+      sparklineCloses,
     });
 
-    logger.log(JSON.stringify({ event: 'baseline_computed', symbol, typicalDailyVolatility, avgVolume, daysUsed: candles.length, lowConfidence }));
+    logger.log(JSON.stringify({ event: 'baseline_computed', symbol, typicalDailyVolatility, avgVolume, daysUsed: candles.length, lowConfidence, sparklineCloses }));
   } catch (err) {
     await repo.markBaselineFailed(symbol);
     logger.error(JSON.stringify({ event: 'baseline_computation_failed', symbol, message: err.message }));

@@ -28,6 +28,7 @@ async function resetDb() {
   await pool.query('DELETE FROM last_seen');
   await pool.query('DELETE FROM watchlist_entry');
   await pool.query('DELETE FROM snapshot');
+  await pool.query('DELETE FROM index_quote');
   await pool.query('DELETE FROM baseline');
   await pool.query('DELETE FROM users');
 }
@@ -162,6 +163,51 @@ async function run() {
       '4. After poll, symbol has real price data',
       item.currentPrice !== null && typeof item.currentPrice === 'number',
       item
+    );
+
+    // ---- Test 4b: new table fields — sparkline, volume, changePct ----
+    assertTrue(
+      '4b-a. sparklineCloses is a 7-element array of numbers (computed at add-time from 20-candle history)',
+      Array.isArray(item.sparklineCloses) && item.sparklineCloses.length === 7 && typeof item.sparklineCloses[6] === 'number',
+      item.sparklineCloses
+    );
+    assertTrue(
+      '4b-b. currentVolume is a number after poll',
+      typeof item.currentVolume === 'number' && item.currentVolume !== null,
+      item.currentVolume
+    );
+    assertTrue(
+      '4b-c. avgVolume is a number after baseline computation',
+      typeof item.avgVolume === 'number' && item.avgVolume !== null,
+      item.avgVolume
+    );
+    assertTrue(
+      '4b-d. changePct is a number (first view = 0 since lastSeen was just seeded to current)',
+      typeof item.changePct === 'number',
+      item.changePct
+    );
+
+    // ---- Test 4c: GET /indices is fully public and caches the headline
+    // indices after the poller run ----
+    const indicesRes = await fetch(`${base}/indices`);
+    const indicesBody = await indicesRes.json();
+    assertTrue(
+      '4c-a. /indices returns 200 without a session cookie',
+      indicesRes.status === 200,
+      indicesRes.status
+    );
+    assertTrue(
+      '4c-b. /indices contains both NIFTY and SENSEX after a poller run',
+      indicesBody.indices.length === 2 &&
+        indicesBody.indices.some((i) => i.symbol === 'NIFTY' && typeof i.price === 'number') &&
+        indicesBody.indices.some((i) => i.symbol === 'SENSEX' && typeof i.price === 'number'),
+      indicesBody
+    );
+    const niftyIdx = indicesBody.indices.find((i) => i.symbol === 'NIFTY');
+    assertTrue(
+      '4c-c. /indices entry has label NIFTY 50',
+      niftyIdx && niftyIdx.label === 'NIFTY 50',
+      niftyIdx
     );
 
     // ---- Test 5: ack the current view, confirm it's recorded ----

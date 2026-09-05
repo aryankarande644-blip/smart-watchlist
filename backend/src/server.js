@@ -7,6 +7,7 @@ const { sessionMiddleware } = require('./routes/session');
 const { createAuthRouter } = require('./routes/auth');
 const createWatchlistRouter = require('./routes/watchlist');
 const { createHealthRouter } = require('./routes/health');
+const { createIndicesRouter } = require('./routes/indices');
 const { createMarketDataClient } = require('./marketData/client');
 const { createPoller } = require('./poller/poller');
 const { createBaselineRefresher } = require('./baseline/refreshBaselines');
@@ -45,6 +46,7 @@ function createApp({ marketDataClient, poller, authOptions = {} }) {
   app.use(cookieParser());
 
   app.use(createHealthRouter({ poller, marketDataClient }));
+  app.use(createIndicesRouter()); // public, like /health — ticker strip
   app.use(sessionMiddleware);
 
   app.use('/auth', createAuthRouter(authOptions));

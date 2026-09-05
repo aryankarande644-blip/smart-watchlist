@@ -4,6 +4,7 @@ import { api } from './api';
 import { WatchlistRow } from './WatchlistRow';
 import { AddSymbolForm } from './AddSymbolForm';
 import { AuthPage } from './AuthPage';
+import { TickerStrip } from './TickerStrip';
 
 // Configurable via VITE_POLL_INTERVAL_MS (ms); default 20s. Env-driven so
 // the interval can be tuned without a code change.
@@ -112,56 +113,77 @@ export function App() {
   }
 
   if (authed === false) {
-    return <AuthPage onAuthenticated={handleAuthenticated} />;
+    return (
+      <div className="app">
+        <TickerStrip />
+        <AuthPage onAuthenticated={handleAuthenticated} />
+      </div>
+    );
   }
 
   return (
-    <div className="page">
-      <header className="masthead">
-        <div className="masthead__row">
-          <h1>Watchlist</h1>
-          <button type="button" className="masthead__logout" onClick={handleLogout}>
-            Log out
-          </button>
-        </div>
-        <p className="masthead__disclaimer">
-          Data for demo purposes, may be delayed — not for financial decisions.
-        </p>
-      </header>
-
-      {connectionError && (
-        <div className="banner banner--error">Can't reach the server. Retrying…</div>
-      )}
-
-      <main>
-        {authed === null && items === null && !connectionError && (
-          <div className="state state--loading">Loading your watchlist…</div>
-        )}
-
-        {items !== null && items.length === 0 && (
-          <div className="state state--empty">
-            <p>Nothing here yet.</p>
-            <p className="state__hint">Add a stock below to start tracking what changes.</p>
+    <div className="app">
+      <TickerStrip />
+      <div className="page">
+        <header className="masthead">
+          <div className="masthead__row">
+            <h1>Watchlist</h1>
+            <button type="button" className="masthead__logout" onClick={handleLogout}>
+              Log out
+            </button>
           </div>
+          <p className="masthead__disclaimer">
+            Data for demo purposes, may be delayed — not for financial decisions.
+          </p>
+        </header>
+
+        {connectionError && (
+          <div className="banner banner--error">Can't reach the server. Retrying…</div>
         )}
 
-        {items !== null && items.length > 0 && (
-          <div className="ledger">
-            {items.map((item, i) => (
-              <WatchlistRow
-                key={item.symbol}
-                item={item}
-                featured={i === 0 && item.diff?.isMeaningful}
-                onAck={handleAck}
-                onRemove={handleRemove}
-                busy={busySymbol === item.symbol}
-              />
-            ))}
-          </div>
-        )}
-      </main>
+        <main>
+          {authed === null && items === null && !connectionError && (
+            <div className="state state--loading">Loading your watchlist…</div>
+          )}
 
-      <AddSymbolForm onAdd={handleAdd} />
+          {items !== null && items.length === 0 && (
+            <div className="state state--empty">
+              <p>Nothing here yet.</p>
+              <p className="state__hint">Add a stock below to start tracking what changes.</p>
+            </div>
+          )}
+
+          {items !== null && items.length > 0 && (
+            <table className="wl-table">
+              <thead>
+                <tr>
+                  <th>Stock</th>
+                  <th>Price</th>
+                  <th>Change</th>
+                  <th>Volume vs Avg</th>
+                  <th>Signal</th>
+                  <th>Last 7 Days</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                {items.map((item, i) => (
+                  <WatchlistRow
+                    key={item.symbol}
+                    item={item}
+                    featured={i === 0 && item.diff?.isMeaningful}
+                    onAck={handleAck}
+                    onRemove={handleRemove}
+                    busy={busySymbol === item.symbol}
+                  />
+                ))}
+              </tbody>
+            </table>
+          )}
+        </main>
+
+        <AddSymbolForm onAdd={handleAdd} />
+      </div>
     </div>
   );
 }

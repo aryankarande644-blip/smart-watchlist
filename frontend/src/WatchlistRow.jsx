@@ -1,34 +1,59 @@
 // src/WatchlistRow.jsx
+import { Sparkline } from './Sparkline';
 
 function formatPrice(price) {
   if (price === null || price === undefined) return '—';
   return `₹${price.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
-function formatPct(finalScore, direction) {
-  // finalScore is in units of "multiples of baseline volatility," not a raw
-  // percent — displaying the raw normalizedMove-derived percent needs the
-  // actual price delta, which we don't reconstruct client-side; instead we
-  // show the score's magnitude as a plain, honest "x baseline" figure.
-  if (finalScore === null || finalScore === undefined) return null;
-  const arrow = direction === 'up' ? '▲' : direction === 'down' ? '▼' : '';
-  return `${arrow} ${Math.abs(finalScore).toFixed(2)}× typical move`;
+function formatPct(changePct) {
+  if (changePct === null || changePct === undefined) return '—';
+  return `${changePct >= 0 ? '+' : ''}${changePct.toFixed(2)}%`;
+}
+
+function formatVolume(volume) {
+  if (volume === null || volume === undefined) return '—';
+  if (volume >= 1e7) return `${(volume / 1e7).toFixed(1)} Cr`;
+  if (volume >= 1e5) return `${(volume / 1e5).toFixed(1)} L`;
+  return volume.toLocaleString('en-IN');
+}
+
+function SignalBadge({ isMeaningful, direction }) {
+  // Signal derived purely from the existing diff.isMeaningful + direction,
+  // no new computation client-side.
+  if (isMeaningful) {
+    const kind = direction === 'up' ? 'signal--up' : direction === 'down' ? 'signal--down' : 'signal--watching';
+    const text = direction === 'up' ? 'Strong up' : direction === 'down' ? 'Strong down' : 'Moving';
+    return <span className={`signal ${kind}`}>{text}</span>;
+  }
+  return <span className="signal signal--muted">Normal</span>;
 }
 
 export function WatchlistRow({ item, featured, onAck, onRemove, busy }) {
-  const { symbol, status, currentPrice, diff } = item;
+  const { symbol, status, currentPrice, changePct, currentVolume, avgVolume, sparklineCloses, diff } = item;
 
   if (status === 'no_data_yet') {
     return (
-      <div className="row row--pending">
-        <div className="row__main">
-          <span className="row__symbol">{symbol}</span>
-          <span className="row__note">Establishing baseline — first data lands shortly</span>
-        </div>
-        <button className="row__remove" onClick={() => onRemove(symbol)} disabled={busy} aria-label={`Remove ${symbol}`}>
-          Remove
-        </button>
-      </div>
+      <tr className="wl-row">
+        <td>
+          <div className="wl-row__stock">
+            <span className="wl-row__symbol">{symbol}</span>
+            <span className="wl-row__pending-note">Establishing baseline — first data lands shortly</span>
+          </div>
+        </td>
+        <td>—</td>
+        <td>—</td>
+        <td>—</td>
+        <td><span className="signal signal--watching">Starting</span></td>
+        <td>—</td>
+        <td>
+          <div className="wl-row__actions">
+            <button className="wl-row__btn" onClick={() => onRemove(symbol)} disabled={busy} aria-label={`Remove ${symbol}`}>
+              Remove
+            </button>
+          </div>
+        </td>
+      </tr>
     );
   }
 
@@ -37,30 +62,46 @@ export function WatchlistRow({ item, featured, onAck, onRemove, busy }) {
   const priceClass = direction === 'up' ? 'up' : direction === 'down' ? 'down' : '';
 
   return (
-    <div className={`row ${featured ? 'row--featured' : ''} ${isMeaningful ? 'row--meaningful' : ''}`}>
-      <div className="row__main">
-        <div className="row__symbol-line">
-          <span className="row__symbol">{symbol}</span>
-          {status === 'stale' && <span className="badge badge--stale">Data delayed</span>}
-          {status === 'market_closed' && <span className="badge badge--closed">Market closed</span>}
+    <tr className={`wl-row${featured ? ' wl-row--featured' : ''}`}>
+      <td>
+        <div className="wl-row__stock">
+          <span className="wl-row__symbol">{symbol}</span>
+          <div className="wl-row__badges">
+            {status === 'stale' && <span className="badge badge--stale">Delayed</span>}
+            {status === 'market_closed' && <span className="badge badge--closed">Closed</span>}
+          </div>
         </div>
-        {diff && diff.reason === 'ok' && (
-          <span className={`row__change ${priceClass}`}>{formatPct(diff.finalScore, direction)}</span>
+      </td>
+      <td className={`wl-row__price ${priceClass}`}>{formatPrice(currentPrice)}</td>
+      <td>
+        <span className={`wl-row__change ${priceClass}`}>{formatPct(changePct)}</span>
+      </td>
+      <td>
+        {currentVolume !== null ? (
+          <div className="wl-row__volume">
+            <strong>{formatVolume(currentVolume)}</strong>
+            <div>vs avg {avgVolume !== null ? formatVolume(avgVolume) : '—'}</div>
+          </div>
+        ) : (
+          <span className="wl-row__volume">—</span>
         )}
-      </div>
-      <div className="row__price-block">
-        <span className={`row__price ${priceClass}`}>{formatPrice(currentPrice)}</span>
-      </div>
-      <div className="row__actions">
-        {isMeaningful && (
-          <button className="row__ack" onClick={() => onAck(symbol)} disabled={busy}>
-            Mark seen
+      </td>
+      <td><SignalBadge isMeaningful={isMeaningful} direction={direction} /></td>
+      <td>
+        <Sparkline closes={sparklineCloses} />
+      </td>
+      <td>
+        <div className="wl-row__actions">
+          {isMeaningful && (
+            <button className="wl-row__btn wl-row__btn--ack" onClick={() => onAck(symbol)} disabled={busy}>
+              Mark seen
+            </button>
+          )}
+          <button className="wl-row__btn" onClick={() => onRemove(symbol)} disabled={busy} aria-label={`Remove ${symbol}`}>
+            Remove
           </button>
-        )}
-        <button className="row__remove" onClick={() => onRemove(symbol)} disabled={busy} aria-label={`Remove ${symbol}`}>
-          Remove
-        </button>
-      </div>
-    </div>
+        </div>
+      </td>
+    </tr>
   );
 }

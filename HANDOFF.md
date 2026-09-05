@@ -137,7 +137,10 @@ CREATE TABLE baseline (
   typical_daily_volatility DOUBLE PRECISION,
   avg_volume BIGINT,              -- MUST be rounded to integer before insert (see Section 8, bug #4)
   history_days_used INT,
-  last_computed_at TIMESTAMPTZ
+  last_computed_at TIMESTAMPTZ,
+  sparkline_closes JSONB          -- migration 003: last <=7 closes for the
+                                  -- "Last 7 Days" sparkline; bounded + always
+                                  -- overwritten at compute time, never re-fetched
 );
 
 -- snapshot: ONE ROW PER SYMBOL (shared), written ONLY by the poller,
@@ -174,6 +177,18 @@ CREATE TABLE last_seen (
   seen_at TIMESTAMPTZ NOT NULL,
   PRIMARY KEY (user_id, symbol)
 );
+
+-- index_quote (migration 003): cache for the two headline indices in the top
+-- ticker strip (NIFTY 50, SENSEX). Indices are NOT stocks — they never enter
+-- baseline/snapshot (those are FK-bound to watchable symbols), so they get
+-- their own tiny table written ONLY by the poller, same model as snapshot.
+CREATE TABLE index_quote (
+  symbol TEXT PRIMARY KEY,          -- 'NIFTY' | 'SENSEX' (logical name)
+  price NUMERIC(12, 2),
+  fetched_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  is_stale BOOLEAN NOT NULL DEFAULT false,
+  market_closed BOOLEAN NOT NULL DEFAULT false
+);
 ```
 
 File: `backend/migrations/001_init.sql`
@@ -198,6 +213,10 @@ GET /watchlist
         symbol: string,
         status: 'live' | 'stale' | 'market_closed' | 'no_data_yet',
         currentPrice: number | null,
+        changePct: number | null,        -- % vs last_seen (for the table)
+        currentVolume: number | null,
+        avgVolume: number | null,
+        sparklineCloses: number[] | null, -- bounded <=7 closes (Last 7 Days)
         snapshotToken: ISOString | undefined,  -- echo this back on ack
         diff: {
           normalizedMove, confidenceMultiplier, finalScore, urgency,
@@ -231,6 +250,13 @@ POST /watchlist/:symbol/ack   body: { snapshotToken: string }
 GET /health
   -> 200 { status: 'ok', db: 'ok', poller: {...}, marketDataCircuit: 'closed' }
   -> 503 { status: 'degraded', ... }   -- if DB unreachable OR circuit breaker open
+
+GET /indices   -- public (mounted before session middleware, like /health);
+               -- powers the top ticker strip. Reads the poller's cache.
+  -> 200 { indices: [
+      { symbol: 'NIFTY'|'SENSEX', label: string, price: number|null,
+        fetchedAt: ISOString, isStale: boolean, marketClosed: boolean }
+    ] }
 ```
 
 Files: `backend/src/routes/watchlist.js`, `backend/src/routes/health.js`
@@ -347,6 +373,18 @@ provider matching this shape). Two providers exist:
   (real NSE prices), bogus -> `422`. See `DEPLOYMENT.md` Phase 2 for the
   full debrief.
 
+### Index symbols are a first-class provider capability, not a .NS stock
+The top ticker strip's NIFTY 50 / SENSEX are *indices*, not stocks: Yahoo
+addresses them by their own symbols (`^NSEI`, `^BSESN`) and they would break
+under the `.NS`-suffix logic. The mapping lives in
+`marketData/indexSymbols.js` (`NIFTY -> ^NSEI`, `SENSEX -> ^BSESN`), used by
+**both** `realProvider.toYahooSymbol` and the poller, so the two agree on
+exactly which symbols are indices. The poller polls them every cycle through
+the *same* `marketDataClient` (retry/backoff/circuit-breaker reused — no
+ad-hoc frontend bypass of the upstream) and caches results in `index_quote`.
+`GET /indices` is public. Volume/avg-volume and the sparkline were added to
+the `/watchlist` items for the table without touching the diff engine.
+
 ### Deployment topology, decided by what the poller requires
 The poller is a long-running background loop — this rules out serverless
 functions (Vercel/Netlify functions, AWS Lambda), which spin up per-request
@@ -377,13 +415,22 @@ as primary defense, plus `/health` honestly reporting
 | `market_closed` row | Trading hours ended | Badge, price still shown |
 | Meaningful change | `diff.isMeaningful === true` | Gold left-border highlight, "Mark seen" button appears |
 
-Design tokens (ledger aesthetic, deliberately avoiding both flagged AI
-design tells — warm-cream/terracotta AND neon-on-black):
-- Background `#14120F`, text `#ECE7DC`, muted `#8C877A`
-- Up `#4C7A64` (desaturated green), down `#A85C46` (desaturated rust)
-- Gold `#C89B3C` — reserved EXCLUSIVELY for `isMeaningful === true`, never decorative
-- Fraunces (serif) for the masthead/headline mover, Inter for everything
-  else, `tabular-nums` on all price figures
+Design tokens (light "Pulse" theme, migration/redesign pass 2026-09-05 — the
+earlier dark ledger theme was replaced by a white background, near-black text,
+hairline borders, colored badges, and a persistent top ticker strip):
+- Background `#FFFFFF`, primary text `#1A1A1A`, secondary text `#6B7280`
+- Up `#16A34A` (green), down `#DC2626` (red)
+- Accent `#D97706` (amber) — reserved EXCLUSIVELY for the single most
+  meaningful row's highlight (featured row background + its Signal badge),
+  never decorative
+- Hairline borders `#E5E7EB`, subtle surface `#F9FAFB` for inputs/active tab
+- Fraunces (serif) for the masthead/headline, Inter for everything else,
+  `tabular-nums` on all price figures
+- Persistent top ticker strip (NIFTY 50, SENSEX) reads the public `/indices`
+  endpoint, sticky at top, above the masthead on every page (incl. login)
+- Watchlist is now a table: Stock | Price | Change | Volume vs Avg | Signal |
+  Last 7 Days. Signal badge derives from the existing diff.isMeaningful +
+  direction. "Last 7 Days" is an inline SVG sparkline over `sparkline_closes`.
 - Polling pauses when tab backgrounded (Page Visibility API)
 - React ErrorBoundary wraps the whole app — one bad render can't blank the page
 
@@ -426,6 +473,8 @@ backend/
   README.md
   package.json                 -- express, pg, cookie-parser, cors, yahoo-finance2
   migrations/001_init.sql      -- full schema, Section 4 above
+  migrations/002_add_auth.sql  -- auth columns + clean cutover (Section 6)
+  migrations/003_indices_and_sparkline.sql -- sparkline_closes + index_quote
   scripts/reset-dev-db.sql     -- local dev clean-slate
   src/
     diffEngine.js               -- Section 3, PURE function, 17 tests
@@ -433,44 +482,52 @@ backend/
                                 --    configurable poll interval, CSRF origin check, baseline refresher
     db/
       pool.js                   -- pg Pool, env-configured DATABASE_URL
-      repository.js             -- every query, race locks, idempotency, refresh-symbols helper
+      repository.js             -- every query, race locks, idempotency, refresh-symbols helper,
+                                --    index_quote cache, sparkline column
     baseline/
-      computeBaseline.js        -- historical candles -> volatility/avgVolume -> status
+      computeBaseline.js        -- historical candles -> volatility/avgVolume -> status + sparkline_closes
       refreshBaselines.js       -- daily off-market recompute job (Section 10 #4), 11 tests
     marketData/
+      indexSymbols.js           -- NIFTY 50 -> ^NSEI, SENSEX -> ^BSESN (index vs .NS mapping)
       client.js                 -- retry/backoff + circuit breaker, provider-agnostic
-      demoProvider.js            -- explicit simulated-data fallback
-      realProvider.js             -- yahoo-finance2 backed, LIVE-verified against real Yahoo data
+      demoProvider.js            -- explicit simulated-data fallback (incl. indices)
+      realProvider.js             -- yahoo-finance2 backed, LIVE-verified (incl. ^NSEI/^BSESN)
     poller/
-      poller.js                 -- per-symbol isolated, overlap-guarded, market-hours + real 2026 NSE holidays
+      poller.js                 -- per-symbol isolated, overlap-guarded, market-hours + real 2026 NSE holidays,
+                                --    also polls headline indices each cycle
     routes/
       session.js                 -- session cookie resolve-only middleware (+ sign/verify/issue/clear; versioned payload)
       auth.js                    -- signup / login / logout, login rate-limited per IP
       watchlist.js                -- GET/POST/DELETE/ack, live symbol validation, 401-guarded
+      indices.js                  -- public GET /indices for the top ticker strip
       health.js                   -- DB + poller + circuit status
     test/
       diffEngine.test.js          -- 17 tests
-      computeBaseline.test.js      -- 9 tests
-      realProvider.test.js          -- 15 tests (mapping/adapter logic + null-close regression, no network needed)
+      computeBaseline.test.js      -- 12 tests (incl. sparkline_closes bounds)
+      realProvider.test.js          -- 35 tests (incl. ^NSEI/^BSESN mapping, direct-fallback)
       repository.test.js             -- 13 tests (real Postgres)
-      marketDataClient.test.js        -- 9 tests
-      poller.test.js                   -- 13 tests (real Postgres, includes real NSE holiday checks)
+      marketDataClient.test.js        -- 19 tests
+      poller.test.js                   -- 17 tests (incl. index polling open/closed)
       refreshBaselines.test.js           -- 11 tests (real Postgres, deterministic schedule math)
-      e2e.test.js                       -- 17 tests (real HTTP server + Postgres, incl. CSRF origin check)
+      auth.test.js                        -- 13 tests
+      e2e.test.js                       -- 35 tests (real HTTP server + Postgres, incl. /indices + table fields)
       run.js                             -- runs all suites in sequence
 
 frontend/
   package.json                  -- react, vite
-  vite.config.js                 -- dev-only proxy to backend
+  vite.config.js                 -- dev-only proxy to backend (incl. /indices)
   index.html                      -- Fraunces + Inter font loading
   src/
     main.jsx                      -- entry, wraps App in ErrorBoundary
-    App.jsx                        -- polling loop (env-configurable interval), all states, visibility pause
+    App.jsx                        -- polling loop, all states, visibility pause, watchlist table
     api.js                          -- thin fetch client matching Section 5 exactly
-    WatchlistRow.jsx                 -- renders all 4 row states
+    TickerStrip.jsx                 -- top sticky NIFTY/SENSEX strip (public /indices)
+    WatchlistRow.jsx                 -- table row: Stock/Price/Change/Volume/Signal/Sparkline
+    Sparkline.jsx                    -- inline SVG "Last 7 Days" sparkline
     AddSymbolForm.jsx                 -- debounced add, inline errors
+    AuthPage.jsx                       -- login/signup (light restyle)
     ErrorBoundary.jsx                  -- React error boundary
-    index.css, App.css                  -- design tokens, Section 7
+    index.css, App.css                  -- light design tokens + table/strip styles, Section 7
 ```
 
 **Run everything locally:**
@@ -480,7 +537,7 @@ psql -f backend/migrations/001_init.sql
 
 cd backend
 npm install
-npm test                          # 104 tests, ~10 seconds, needs Postgres reachable
+npm test                          # 172 tests across 9 suites, needs Postgres reachable
 DATABASE_URL=... MARKET_DATA_PROVIDER=demo npm start   # runs on :3001
 
 cd ../frontend
@@ -657,6 +714,34 @@ build environment could not render/screenshot it.
   defense; a middleware additionally rejects any state-changing request
   whose `Origin` header doesn't match `FRONTEND_ORIGIN`
   (`403 cross_origin_forbidden`), tested in `e2e.test.js` (test 10/10b).
+
+### 7. Light-theme redesign + ticker strip + sparkline — DONE (2026-09-05)
+A full visual redesign to the light "Pulse" look plus the table restructure,
+all in commit `c20eac9`'s successor (`003` migration + frontend). No backend
+behavior changed beyond the additive pieces described here:
+- **Migration `003_indices_and_sparkline.sql`:** `baseline.sparkline_closes`
+  (JSONB) + new `index_quote` table for the two headline indices.
+- **Sparkline:** `computeBaselineForSymbol` now captures the last <=7 closes
+  from the (otherwise discarded) 20-candle history and persists them on the
+  baseline row — bounded, always overwritten at compute/recompute, no
+  re-fetch from Yahoo on page load (the unbounded-storage concern noted
+  earlier is deliberately avoided). Tested in `computeBaseline.test.js`.
+- **Index handling:** `marketData/indexSymbols.js` maps `NIFTY -> ^NSEI`,
+  `SENSEX -> ^BSESN`; `realProvider.toYahooSymbol` honors it (no `.NS` for
+  indices) and the poller polls them each cycle through the shared
+  circuit-breaker client, caching to `index_quote`, with the same
+  market-closed/stale degradation as snapshots. Live-verified against real
+  Yahoo before this write-up: NIFTY -> 23,897.7 & ^BSESN SENSEX -> 76,515.43.
+- **`GET /indices`** (public, before session middleware) feeds the sticky
+  top ticker strip on the frontend.
+- **`/watchlist` items** gained `changePct`, `currentVolume`, `avgVolume`,
+  `sparklineCloses` — the table's columns. Diff engine untouched.
+- **Frontend:** light tokens, bump-free table (Stock | Price | Change |
+  Volume vs Avg | Signal | Last 7 Days), Signal badge derived from the
+  existing `isMeaningful` + `direction`, inline-SVG sparkline, amber accent
+  reserved for the single most-meaningful row, restyled auth/empty/disclaimer.
+- Verified: full suite green (172 tests), production build clean, and (in
+  the deploy pass) live HTTP checks on Render + Vercel.
 
 ---
 

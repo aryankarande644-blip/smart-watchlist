@@ -86,6 +86,10 @@ router.get('/watchlist', async (req, res, next) => {
           symbol: row.symbol,
           status: 'no_data_yet',
           currentPrice: null,
+          changePct: null,
+          currentVolume: null,
+          avgVolume: null,
+          sparklineCloses: null,
           diff: null,
         };
       }
@@ -95,10 +99,18 @@ router.get('/watchlist', async (req, res, next) => {
       const lastSeen = lastSeenRaw ?? { price: current.price, volume: current.volume, timestamp: current.timestamp };
       const diff = computeDiff(lastSeen, current, baseline);
 
+      const changePct = lastSeen.price > 0
+        ? ((current.price - lastSeen.price) / lastSeen.price) * 100
+        : null;
+
       return {
         symbol: row.symbol,
         status: row.is_stale ? 'stale' : row.market_closed ? 'market_closed' : 'live',
         currentPrice: current.price,
+        changePct,
+        currentVolume: row.current_volume === null ? null : Number(row.current_volume),
+        avgVolume: row.avg_volume === null ? null : Number(row.avg_volume),
+        sparklineCloses: row.sparkline_closes,
         snapshotToken: row.snapshot_fetched_at, // server-issued, echoed back on ack — no client clock trust
         diff,
       };

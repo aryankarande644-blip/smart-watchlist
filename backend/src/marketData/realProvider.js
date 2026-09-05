@@ -21,6 +21,7 @@
 // were LIVE-VERIFIED against real Yahoo data during the build.
 
 const YahooFinance = require('yahoo-finance2').default;
+const { INDEX_BY_SYMBOL } = require('./indexSymbols');
 
 // A real, current desktop Chrome UA. Yahoo's crumb/consent flow has
 // historically rejected the package's own "compatible" UA, especially from
@@ -55,8 +56,16 @@ function createRealProvider(yahooFinanceClient = defaultYahooFinanceClient()) {
   // BSE would use .BO — NSE is the more liquid/primary exchange for most
   // large-caps, so it's the default here; a real product might let a user
   // pick, but that's explicitly out of scope per the interface contract.
+  //
+  // The two headline indices are NOT stocks: they map to Yahoo's own index
+  // symbols (^NSEI / ^BSESN) and must never get the .NS suffix. The mapping
+  // lives in indexSymbols.js so the provider and the poller agree on exactly
+  // which symbols are indices.
   function toYahooSymbol(symbol) {
-    return `${symbol}.NS`;
+    const upper = String(symbol).toUpperCase();
+    const index = INDEX_BY_SYMBOL[upper];
+    if (index) return index.yahooSymbol;
+    return `${upper}.NS`;
   }
 
   // Once Yahoo refuses the crumb gate, bypass the package's wrapper entirely

@@ -13,6 +13,7 @@ async function resetDb() {
   await pool.query('DELETE FROM last_seen');
   await pool.query('DELETE FROM watchlist_entry');
   await pool.query('DELETE FROM snapshot');
+  await pool.query('DELETE FROM index_quote');
   await pool.query('DELETE FROM baseline');
   await pool.query('DELETE FROM users');
 }
@@ -102,6 +103,49 @@ async function run() {
     await poller.runCycle();
     const snap = await repo.getSnapshot('CLOSEDTEST');
     assertTrue('1e. Market-closed cycle flags existing snapshot as marketClosed without fetching', snap.market_closed === true, snap);
+  }
+
+  // ---- Test 5: indices are polled on the same cycle (sharing the client)
+  // and cached in index_quote; a failing index degrades to stale, not crash ----
+  {
+    // Seed a SENSEX row so the staleness path (like the stock path in 1d)
+    // has a last-known-good price to preserve.
+    await repo.upsertIndexQuote('SENSEX', { price: 85600, isStale: false, marketClosed: false });
+
+    const poller = createPoller({
+      marketDataClient: {
+        async fetchQuote(symbol) {
+          if (symbol === 'SENSEX') throw new Error('index upstream blip');
+          return { price: 100 + Math.random(), volume: 5000 };
+        },
+      },
+      logger: silentLogger,
+      isMarketOpenFn: () => true,
+    });
+    await poller.runCycle();
+
+    const nifty = await repo.getIndexQuote('NIFTY');
+    assertTrue('5a. NIFTY index quote cached during the open-market cycle', nifty !== null && Number(nifty.price) > 0 && nifty.is_stale === false, nifty);
+    const sensex = await repo.getIndexQuote('SENSEX');
+    assertTrue(
+      '5b. A failing index keeps its last-known-good price and flips is_stale (cycle survives the failure)',
+      sensex !== null && Number(sensex.price) === 85600 && sensex.is_stale === true,
+      sensex
+    );
+  }
+
+  // ---- Test 5c: market-closed cycles re-flag existing index rows as closed ----
+  {
+    await repo.upsertIndexQuote('NIFTY', { price: 26200, isStale: false, marketClosed: false });
+    await repo.upsertIndexQuote('SENSEX', { price: 85600, isStale: false, marketClosed: false });
+
+    const poller = createPoller({ marketDataClient: makeMixedClient(), logger: silentLogger, isMarketOpenFn: () => false });
+    await poller.runCycle();
+
+    const nifty = await repo.getIndexQuote('NIFTY');
+    const sensex = await repo.getIndexQuote('SENSEX');
+    assertTrue('5c. Closed cycle flags indices market_closed, keeping last price', nifty.market_closed === true && Number(nifty.price) === 26200, nifty);
+    assertTrue('5d. Second index also flagged market_closed', sensex.market_closed === true && Number(sensex.price) === 85600, sensex);
   }
 
   // ---- Test 2: overlap guard prevents concurrent cycles ----

@@ -13,6 +13,7 @@ async function resetDb() {
   await pool.query('DELETE FROM last_seen');
   await pool.query('DELETE FROM watchlist_entry');
   await pool.query('DELETE FROM snapshot');
+  await pool.query('DELETE FROM index_quote');
   await pool.query('DELETE FROM baseline');
   await pool.query('DELETE FROM users');
 }
@@ -25,12 +26,13 @@ async function run() {
   // ---- Test 1: normal computation reaches 'ready' with real numbers written to DB ----
   {
     await repo.ensureBaselineExists('TESTSYM1');
+    const closes = Array.from({ length: 20 }, (_, i) => 100 + Math.sin(i) * 2);
     const provider = {
       async fetchHistorical() {
         // Fractional volumes on purpose — this is the exact shape that
         // broke avg_volume's BIGINT column before the fix.
-        return Array.from({ length: 20 }, (_, i) => ({
-          close: 100 + Math.sin(i) * 2,
+        return closes.map((close, i) => ({
+          close,
           volume: 50000.7 + i * 123.456,
         }));
       },
@@ -40,6 +42,38 @@ async function run() {
     assertTrue('1a. Baseline reaches status=ready', baseline.status === 'ready', baseline);
     assertTrue('1b. typical_daily_volatility is a positive real number', Number(baseline.typical_daily_volatility) > 0, baseline.typical_daily_volatility);
     assertTrue('1c. avg_volume is written as a whole number (BIGINT-safe)', Number.isInteger(Number(baseline.avg_volume)), baseline.avg_volume);
+  }
+
+  // ---- Test 1d/e: sparkline_closes is captured at compute time — exactly
+  // the last 7 closes, bounded, rounded, matching the source candles ----
+  {
+    await repo.ensureBaselineExists('TESTSYM5');
+    const closes = Array.from({ length: 20 }, (_, i) => 100 + Math.sin(i) * 2);
+    const provider = {
+      async fetchHistorical() {
+        return closes.map((close, i) => ({ close, volume: 40000 + i }));
+      },
+    };
+    await computeBaselineForSymbol('TESTSYM5', provider, silentLogger);
+    const baseline = await repo.getBaseline('TESTSYM5');
+    const expected = closes.slice(-7).map((c) => Math.round(c * 100) / 100);
+    assertTrue('1d. sparkline_closes holds exactly the last 7 closes', Array.isArray(baseline.sparkline_closes) && baseline.sparkline_closes.length === 7 && baseline.sparkline_closes.length === expected.length, baseline.sparkline_closes);
+    assertTrue('1e. sparkline values match the source candles (rounded)', JSON.stringify(baseline.sparkline_closes) === JSON.stringify(expected), { got: baseline.sparkline_closes, expected });
+  }
+
+  // ---- Test 1f: a short (low_confidence) history still gets a bounded
+  // sparkline — never more than 7 points, still overwritten ----
+  {
+    await repo.ensureBaselineExists('TESTSYM6');
+    const closes6 = Array.from({ length: 8 }, (_, i) => 200 + i);
+    const provider = {
+      async fetchHistorical() {
+        return closes6.map((close) => ({ close, volume: 30000 }));
+      },
+    };
+    await computeBaselineForSymbol('TESTSYM6', provider, silentLogger);
+    const baseline = await repo.getBaseline('TESTSYM6');
+    assertTrue('1f. Short history gets min(7, days) sparkline points (bounded)', Array.isArray(baseline.sparkline_closes) && baseline.sparkline_closes.length === 7 && baseline.sparkline_closes.length <= 7 && baseline.sparkline_closes[6] === 207, baseline.sparkline_closes);
   }
 
   // ---- Test 2: insufficient history marks baseline as failed, not crashing ----

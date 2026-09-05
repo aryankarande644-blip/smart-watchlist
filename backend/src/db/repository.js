@@ -87,13 +87,16 @@ async function getRefreshableBaselineSymbols() {
   return rows;
 }
 
-async function markBaselineReady(symbol, { typicalDailyVolatility, avgVolume, historyDaysUsed, lowConfidence = false }) {
+// sparklineCloses: the last <=7 closing prices captured at compute time —
+// a bounded, always-overwritten summary so the frontend's "Last 7 Days"
+// sparkline never requires re-fetching history from the provider.
+async function markBaselineReady(symbol, { typicalDailyVolatility, avgVolume, historyDaysUsed, lowConfidence = false, sparklineCloses }) {
   await pool.query(
     `UPDATE baseline
      SET status = $5, typical_daily_volatility = $2, avg_volume = $3,
-         history_days_used = $4, last_computed_at = now()
+         history_days_used = $4, last_computed_at = now(), sparkline_closes = $6
      WHERE symbol = $1`,
-    [symbol, typicalDailyVolatility, avgVolume, historyDaysUsed, lowConfidence ? 'low_confidence' : 'ready']
+    [symbol, typicalDailyVolatility, avgVolume, historyDaysUsed, lowConfidence ? 'low_confidence' : 'ready', sparklineCloses != null ? JSON.stringify(sparklineCloses) : null]
   );
 }
 
@@ -144,6 +147,7 @@ async function getWatchlistWithData(userId) {
        b.status AS baseline_status,
        b.typical_daily_volatility,
        b.avg_volume,
+       b.sparkline_closes,
        ls.price AS last_seen_price,
        ls.volume AS last_seen_volume,
        ls.seen_at AS last_seen_at
@@ -195,6 +199,40 @@ async function getSnapshot(symbol) {
 async function getDistinctWatchedSymbols() {
   const { rows } = await pool.query('SELECT DISTINCT symbol FROM watchlist_entry');
   return rows.map((r) => r.symbol);
+}
+
+// ---- Index quotes (the top ticker strip's cache, written only by the poller) ----
+
+// Indices never enter snapshot/baseline (those are FK-bound to watchable
+// symbols), so they get their own tiny table — same write model as snapshot:
+// atomic replace, never partial-field update.
+async function upsertIndexQuote(symbol, { price, isStale, marketClosed }) {
+  await pool.query(
+    `INSERT INTO index_quote (symbol, price, fetched_at, is_stale, market_closed)
+     VALUES ($1, $2, now(), $3, $4)
+     ON CONFLICT (symbol) DO UPDATE SET
+       price = EXCLUDED.price,
+       fetched_at = EXCLUDED.fetched_at,
+       is_stale = EXCLUDED.is_stale,
+       market_closed = EXCLUDED.market_closed`,
+    [symbol, price, isStale, marketClosed]
+  );
+}
+
+async function markIndexQuoteStale(symbol) {
+  // Same semantics as snapshot staleness: keep last-known-good price, only
+  // flip the flag. No-op if no row exists yet (never successfully fetched).
+  await pool.query('UPDATE index_quote SET is_stale = true WHERE symbol = $1', [symbol]);
+}
+
+async function getIndexQuote(symbol) {
+  const { rows } = await pool.query('SELECT * FROM index_quote WHERE symbol = $1', [symbol]);
+  return rows[0] || null;
+}
+
+async function getIndexQuotes() {
+  const { rows } = await pool.query('SELECT * FROM index_quote ORDER BY symbol');
+  return rows;
 }
 
 // ---- Last seen (the ack / "what changed since you last checked" reset) ----
@@ -254,6 +292,10 @@ module.exports = {
   markSnapshotStale,
   getSnapshot,
   getDistinctWatchedSymbols,
+  upsertIndexQuote,
+  markIndexQuoteStale,
+  getIndexQuote,
+  getIndexQuotes,
   seedLastSeenOnAdd,
   ackWatchlistItem,
   getLastSeen,

@@ -1,5 +1,6 @@
 // src/poller/poller.js
 const repo = require('../db/repository');
+const { INDEX_SYMBOLS } = require('../marketData/indexSymbols');
 
 // NSE trading window, IST. Kept simple and explicit per the decision to
 // hardcode a static holiday list rather than call a live calendar API.
@@ -80,6 +81,22 @@ function createPoller({ marketDataClient, intervalMs = 30000, logger = console, 
             logger.error(JSON.stringify({ event: 'market_closed_flag_error', symbol, message: err.message }));
           }
         }
+        // Same treatment for the ticker-strip indices: keep the last price,
+        // flip market_closed. No row yet = never fetched, leave it alone.
+        for (const { symbol } of INDEX_SYMBOLS) {
+          try {
+            const existing = await repo.getIndexQuote(symbol);
+            if (existing) {
+              await repo.upsertIndexQuote(symbol, {
+                price: existing.price,
+                isStale: existing.is_stale,
+                marketClosed: true,
+              });
+            }
+          } catch (err) {
+            logger.error(JSON.stringify({ event: 'index_market_closed_flag_error', symbol, message: err.message }));
+          }
+        }
         logger.log(JSON.stringify({ event: 'poll_cycle_skipped_market_closed', symbolCount: symbols.length }));
         return;
       }
@@ -104,6 +121,29 @@ function createPoller({ marketDataClient, intervalMs = 30000, logger = console, 
             logger.error(JSON.stringify({ event: 'mark_stale_failed', symbol, message: dbErr.message }));
           }
           logger.error(JSON.stringify({ event: 'symbol_fetch_failed', symbol, message: err.message }));
+        }
+      }
+
+      // Index ticker strip: poll the headline indices on the same cycle,
+      // through the SAME marketDataClient so they share the retry/backoff/
+      // circuit-breaker — no ad hoc frontend bypass of the upstream.
+      for (const { symbol } of INDEX_SYMBOLS) {
+        try {
+          const quote = await marketDataClient.fetchQuote(symbol);
+          await repo.upsertIndexQuote(symbol, {
+            price: quote.price,
+            isStale: false,
+            marketClosed: false,
+          });
+          successCount++;
+        } catch (err) {
+          failCount++;
+          try {
+            await repo.markIndexQuoteStale(symbol);
+          } catch (dbErr) {
+            logger.error(JSON.stringify({ event: 'mark_index_stale_failed', symbol, message: dbErr.message }));
+          }
+          logger.error(JSON.stringify({ event: 'index_fetch_failed', symbol, message: err.message }));
         }
       }
 

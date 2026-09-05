@@ -1,12 +1,14 @@
 :root {
-  --ink: #14120f;
-  --paper: #ece7dc;
-  --muted: #8c877a;
-  --up: #4c7a64;
-  --down: #a85c46;
-  --gold: #c89b3c;
-  --hairline: #2a271f;
-  --ink-raised: #1b1814;
+  --ink: #1a1a1a;
+  --paper: #ffffff;
+  --muted: #6b7280;
+  --up: #16a34a;
+  --down: #dc2626;
+  --accent: #d97706;
+  --gold: #d97706;
+  --hairline: #e5e7eb;
+  --surface: #f9fafb;
+  --ink-raised: #1a1a1a;
 
   --font-display: 'Fraunces', Georgia, serif;
   --font-ui: 'Inter', -apple-system, sans-serif;
@@ -24,8 +26,8 @@ body,
 
 body {
   margin: 0;
-  background: var(--ink);
-  color: var(--paper);
+  background: var(--paper);
+  color: var(--ink);
   font-family: var(--font-ui);
   -webkit-font-smoothing: antialiased;
 }
@@ -37,7 +39,7 @@ button {
 button:focus-visible,
 input:focus-visible,
 a:focus-visible {
-  outline: 2px solid var(--gold);
+  outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
 

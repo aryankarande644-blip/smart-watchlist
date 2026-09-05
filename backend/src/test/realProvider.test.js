@@ -67,6 +67,56 @@ async function run() {
     assertTrue('1c. volume mapped from regularMarketVolume', result.volume === 4500000, result);
   }
 
+  // ---- Test 1i: headline indices are NOT .NS stocks — they map to Yahoo's
+  // own index symbols (^NSEI for NIFTY 50, ^BSESN for SENSEX) ----
+  {
+    const fake = makeFakeYahooClient({
+      quoteResponse: { regularMarketPrice: 26200.5, regularMarketVolume: null, currency: 'INR' },
+    });
+    const provider = createRealProvider(fake);
+    const nifty = await provider.fetchQuote('NIFTY');
+    assertTrue('1i-a. NIFTY quote maps to ^NSEI (never .NS)', fake.calls[0][1] === '^NSEI', fake.calls[0]);
+    assertTrue('1i-b. NIFTY price surfaces correctly', nifty.price === 26200.5, nifty);
+
+    const sensex = await provider.fetchQuote('SENSEX');
+    assertTrue('1i-c. SENSEX quote maps to ^BSESN', fake.calls[1][1] === '^BSESN', fake.calls[1]);
+    assertTrue('1i-d. SENSEX price surfaces correctly', sensex.price === 26200.5, sensex.price);
+
+    const lower = await provider.fetchQuote('sensex'); // case-insensitive too
+    assertTrue('1i-e. Index mapping is case-insensitive', fake.calls[2][1] === '^BSESN', fake.calls[2]);
+  }
+
+  // ---- Test 1j: index history also uses the ^symbol, not .NS ----
+  {
+    const fake = makeFakeYahooClient({
+      chartResponse: {
+        meta: {},
+        quotes: Array.from({ length: 20 }, (_, i) => ({ close: 20000 + i, volume: 0 })),
+      },
+    });
+    const provider = createRealProvider(fake);
+    const result = await provider.fetchHistorical('NIFTY', 20);
+    assertTrue('1j-a. NIFTY history requests ^NSEI', fake.calls[0][1] === '^NSEI', fake.calls[0]);
+    assertTrue('1j-b. NIFTY history returns 20 candles', result.length === 20, result.length);
+  }
+
+  // ---- Test 1k: index mapping works on the direct-fetch fallback too ----
+  {
+    stubFetch(() => ({
+      chart: {
+        result: [{
+          meta: { regularMarketPrice: 85000, regularMarketTime: 1757000000 },
+          indicators: { quote: [{ volume: [null] }] },
+        }],
+      },
+    }));
+    const fake = makeFakeYahooClient({ throwOnQuote: new Error("No set-cookie header present in Yahoo's response") });
+    const provider = createRealProvider(fake);
+    const result = await provider.fetchQuote('SENSEX');
+    assertTrue('1k-a. Direct-fallback SENSEX request targets ^BSESN', stubbedUrls.length === 1 && stubbedUrls[0].url.includes('^BSESN'), stubbedUrls[0].url);
+    assertTrue('1k-b. Direct-fallback SENSEX price read from chart meta', result.price === 85000, result);
+  }
+
   // ---- Test 2: missing/malformed quote data throws (so retry/circuit breaker can handle it) ----
   {
     const fake = makeFakeYahooClient({ quoteResponse: { regularMarketPrice: null } }); // delisted-style response

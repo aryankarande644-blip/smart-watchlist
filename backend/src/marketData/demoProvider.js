@@ -10,6 +10,7 @@
 const SEED_PRICES = {
   RELIANCE: 2980, TCS: 3850, INFY: 1650, HDFCBANK: 1680,
   WIPRO: 445, AXISBANK: 1150, ICICIBANK: 1220, SBIN: 810,
+  NIFTY: 26200, SENSEX: 85600, // headline indices for the ticker strip
 };
 
 // Each symbol drifts from its own running price with small random noise,
