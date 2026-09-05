@@ -148,6 +148,26 @@ async function run() {
     assertTrue('5d. Second index also flagged market_closed', sensex.market_closed === true && Number(sensex.price) === 85600, sensex);
   }
 
+  // ---- Test 5e: closed cycle still seeds a never-fetched index so the
+  // ticker strip always renders both labels (regression: /indices returned
+  // [] before any open-market poll, blanking the strip on weekends) ----
+  {
+    // Clear index_quote so NIFTY/SENSEX have no rows ("never fetched").
+    await pool.query('DELETE FROM index_quote');
+
+    const poller = createPoller({ marketDataClient: makeMixedClient(), logger: silentLogger, isMarketOpenFn: () => false });
+    await poller.runCycle();
+
+    const all = await repo.getIndexQuotes();
+    const nifty = all.find((r) => r.symbol === 'NIFTY');
+    const sensex = all.find((r) => r.symbol === 'SENSEX');
+    assertTrue(
+      '5e. Closed cycle seeds both never-fetched indices with price NULL + marketClosed',
+      all.length === 2 && nifty && sensex && nifty.price === null && sensex.price === null && nifty.market_closed === true && sensex.market_closed === true,
+      all
+    );
+  }
+
   // ---- Test 2: overlap guard prevents concurrent cycles ----
   {
     let fetchCount = 0;

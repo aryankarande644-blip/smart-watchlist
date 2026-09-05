@@ -82,7 +82,10 @@ function createPoller({ marketDataClient, intervalMs = 30000, logger = console, 
           }
         }
         // Same treatment for the ticker-strip indices: keep the last price,
-        // flip market_closed. No row yet = never fetched, leave it alone.
+        // flip market_closed. If a canonical index has never been fetched
+        // (no row exists — e.g. its first ever open-market poll hasn't
+        // happened yet), seed a placeholder row so the ticker strip still
+        // renders both labels with a "Closed" state instead of vanishing.
         for (const { symbol } of INDEX_SYMBOLS) {
           try {
             const existing = await repo.getIndexQuote(symbol);
@@ -90,6 +93,12 @@ function createPoller({ marketDataClient, intervalMs = 30000, logger = console, 
               await repo.upsertIndexQuote(symbol, {
                 price: existing.price,
                 isStale: existing.is_stale,
+                marketClosed: true,
+              });
+            } else {
+              await repo.upsertIndexQuote(symbol, {
+                price: null,
+                isStale: false,
                 marketClosed: true,
               });
             }
