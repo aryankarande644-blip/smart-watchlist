@@ -180,6 +180,36 @@ async function run() {
     });
     assertTrue('10b. Same request without Origin is accepted normally', noOriginRes.status === 201, noOriginRes.status);
 
+    // ---- Test 11: a signed-but-orphaned session cookie (its user row was
+    // deleted, e.g. by a DB reset) must NOT 500 — the middleware substitutes a
+    // fresh anonymous session and the request succeeds. Regression for the
+    // FK-23503 crash found live: TRUNCATE users CASCADE orphaned pre-reset
+    // cookies, and addToWatchlist then blew up on the missing parent row. ----
+    const orphanCookieSetup = await fetch(`${base}/watchlist`); // mints a fresh session
+    const orphanCookieHeader = orphanCookieSetup.headers.get('set-cookie');
+    const orphanCookie = orphanCookieHeader ? orphanCookieHeader.split(';')[0] : null;
+    assertTrue('11. Orphan-cookie setup produced a cookie', !!orphanCookie, orphanCookieHeader);
+    await pool.query('DELETE FROM users'); // orphan every session, simulating a DB reset
+    const orphanRes = await fetch(`${base}/watchlist`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Cookie: orphanCookie },
+      body: JSON.stringify({ symbol: 'TCS' }),
+    });
+    const orphanBody = await orphanRes.json();
+    const orphanSetCookie = orphanRes.headers.get('set-cookie');
+    assertTrue(
+      '11. Orphaned cookie gets a fresh anonymous session, not a 500',
+      orphanRes.status === 201 && !!orphanSetCookie && !!orphanCookie && orphanSetCookie.split(';')[0] !== orphanCookie,
+      { status: orphanRes.status, orphanSetCookie, body: orphanBody }
+    );
+    const orphanList = await fetch(`${base}/watchlist`, { headers: { Cookie: orphanSetCookie.split(';')[0] } });
+    const orphanListBody = await orphanList.json();
+    assertTrue(
+      '11b. Orphaned-session add actually persisted (fresh user owns it now)',
+      orphanListBody.items.some((i) => i.symbol === 'TCS'),
+      orphanListBody
+    );
+
   } finally {
     poller.stop();
     server.close();

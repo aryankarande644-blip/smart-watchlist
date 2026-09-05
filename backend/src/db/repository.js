@@ -10,6 +10,11 @@ async function createUser() {
   return rows[0];
 }
 
+async function userExists(userId) {
+  const { rows } = await pool.query('SELECT 1 FROM users WHERE id = $1', [userId]);
+  return rows.length > 0;
+}
+
 // ---- Symbol validation / baseline (race-safe insert) ----
 
 // Returns { created: boolean, baseline: row }
@@ -201,6 +206,7 @@ async function getLastSeen(userId, symbol) {
 
 module.exports = {
   createUser,
+  userExists,
   ensureBaselineExists,
   getBaseline,
   getRefreshableBaselineSymbols,

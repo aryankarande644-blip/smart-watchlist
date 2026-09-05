@@ -46,7 +46,23 @@ async function sessionMiddleware(req, res, next) {
     const userId = cookieVal ? verify(cookieVal) : null;
 
     if (userId) {
-      req.userId = userId;
+      const exists = await repo.userExists(userId);
+      if (exists) {
+        req.userId = userId;
+        return next();
+      }
+
+      // Signed cookie is valid but its user row is gone (e.g. a DB reset /
+      // TRUNCATE users CASCADE). Keep the request working: substitute a fresh
+      // anonymous session instead of letting the FK throw a 500 later.
+      const freshUser = await repo.createUser();
+      res.cookie(COOKIE_NAME, sign(freshUser.id), {
+        httpOnly: true,
+        sameSite: SAME_SITE,
+        secure: IS_SECURE,
+        maxAge: 1000 * 60 * 60 * 24 * 365,
+      });
+      req.userId = freshUser.id;
       return next();
     }
 
