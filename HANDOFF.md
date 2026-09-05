@@ -733,7 +733,13 @@ behavior changed beyond the additive pieces described here:
   market-closed/stale degradation as snapshots. Live-verified against real
   Yahoo before this write-up: NIFTY -> 23,897.7 & ^BSESN SENSEX -> 76,515.43.
 - **`GET /indices`** (public, before session middleware) feeds the sticky
-  top ticker strip on the frontend.
+  top ticker strip on the frontend. **Off-market caveat (found live):** when
+  the market is closed and an index has *never* been fetched, `/indices`
+  used to return `[]`, which blanked the strip on weekends. The poller now
+  seeds the two canonical index row(s) with `price:null` + `marketClosed`
+  in the closed branch (and the frontend has an equivalent empty fallback),
+  so the strip always renders "NIFTY 50 ₹— Closed" / "SENSEX ₹— Closed"
+  instead of disappearing.
 - **`/watchlist` items** gained `changePct`, `currentVolume`, `avgVolume`,
   `sparklineCloses` — the table's columns. Diff engine untouched.
 - **Frontend:** light tokens, bump-free table (Stock | Price | Change |
