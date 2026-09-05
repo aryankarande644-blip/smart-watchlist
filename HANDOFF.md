@@ -518,6 +518,48 @@ backend: `/health` db ok, `HDFCBANK` -> ₹712.10, `RELIANCE` -> ₹1,322
 (real NSE via Yahoo quote and history), bogus -> `422 unknown_symbol`.
 Full debrief: `DEPLOYMENT.md` Phase 2.
 
+**FINAL VERIFICATION PASS — DEPLOYMENT VERIFIED DONE (2026-09-05).**
+After a clean-slate DB reset (Neon `TRUNCATE last_seen, watchlist_entry,
+snapshot, baseline, users CASCADE`), re-verified live end-to-end:
+- **Live URLs:** backend `https://watchlist-backend-mt3i.onrender.com`,
+  frontend `https://smart-watchlist-hazel.vercel.app`.
+- **`FRONTEND_ORIGIN` on Render** is the real Vercel URL
+  (`https://smart-watchlist-hazel.vercel.app`), not the `CHANGE-ME`
+  placeholder — confirmed via the CORS echo on cross-origin requests.
+- **Fresh adds via live API:** TCS, HDFCBANK, RELIANCE all returned
+  `diff.finalScore = 0` on first view (baselines recomputed from 20 real
+  completed daily candles; TCS 1.69% daily vol, HDFCBANK 0.86%, RELIANCE
+  0.87%). No inflated scores.
+- **`/health`:** `status: ok`, `db: ok`, `marketDataCircuit: "closed"`,
+  `lastQuoteError: null`. (`lastSuccessfulPollAt: null` is normal
+  off-market — see Section 6 keep-alive note.)
+- **Cross-domain session cookie:** verified at the HTTP contract level —
+  first cross-origin request sets `session_uid` (`HttpOnly, Secure,
+  SameSite=None`), subsequent cross-origin GET persists the same session
+  and returns the same watchlist. End-to-end incognito-browser click test
+  is still worth doing by hand (item A below).
+
+**Open items (not blocking; none are deployment blockers):**
+- **A.** Run one manual incognito-window click test on the hazel URL (add
+  a symbol, refresh, confirm it persists) — HTTP-level cookie contract is
+  proven, browser-level double-check remains.
+- **B.** `https://smart-watchlist.vercel.app` still serves a STALE build
+  (no `VITE_API_BASE_URL` baked in — its `/watchlist` calls 404 on
+  Vercel). The live build is on the `smart-watchlist-hazel` alias.
+  Retire/deploy-over the bare alias so nobody lands on the broken build.
+- **C.** ~~Anonymous session bloat from cookie-less `/health` polling
+  (~17k rows/day).~~ **RESOLVED (this commit):** `/health` is now
+  registered *before* the session middleware in `server.js`, so health
+  pings mint no session and no `users` row. Verified locally (6 `/health`
+  hits -> 0 user rows, session flow intact) and 104/104 tests pass.
+- **D.** External keep-alive monitor at `/health` (DEPLOYMENT.md final
+  runbook step) — confirm it's still in place so the free Render instance
+  stays awake.
+- **E.** Render dashboard log scan for `unhandled_route_error` /
+  `poll_cycle_top_level_error` wasn't reachable from this CLI session;
+  worth a 30-second glance in the Render Logs tab (none surfaced over
+  HTTP during this pass — every probe returned an expected status code).
+
 Topology, following Section 6 exactly:
 - Neon or Supabase -> run `migrations/001_init.sql` against it -> get `DATABASE_URL`
 - Render or Railway -> deploy `backend/`, set env vars (`DATABASE_URL`,

@@ -41,10 +41,11 @@ function createApp({ marketDataClient, poller }) {
   app.use(originCheck(FRONTEND_ORIGIN));
   app.use(express.json());
   app.use(cookieParser());
+
+  app.use(createHealthRouter({ poller, marketDataClient }));
   app.use(sessionMiddleware);
 
   app.use(createWatchlistRouter({ marketDataClient }));
-  app.use(createHealthRouter({ poller, marketDataClient }));
 
   // Central error handler — every route's `next(err)` lands here.
   app.use((err, req, res, next) => {
