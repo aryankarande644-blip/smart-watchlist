@@ -380,6 +380,7 @@ real traps, not hypotheticals)
 | 8 | Nothing to demo without a live market API key | No network path to a real provider in the build sandbox | Built `demoProvider.js` as an explicit, labeled fallback |
 | 9 | `fetchHistorical` always failed whenever the market was open | Yahoo returns the current in-progress session as a 1d candle with `close:null`, and yahoo-finance2's `historical()` wrapper throws on ANY row with a null close — so baseline computation died during trading hours, exactly when the app runs | Switched `realProvider.fetchHistorical` to the `chart()` endpoint (returns nulls gracefully) and filter out incomplete candles before slicing; incomplete candles must never enter a volatility baseline anyway |
 | 10 | After a DB reset (`TRUNCATE ... users CASCADE`), the app returned 500s ("Could not add that symbol") for pre-reset sessions | `session_uid` cookies are signed and live 1 year; the middleware verified the signature but never checked the `users` row still existed, so `addToWatchlist`'s INSERT blew up on FK `watchlist_entry_user_id_fkey` (SQL 23503). Found live via raw-error capture on `/health` | Middleware now checks the user row exists; a signed-but-orphaned cookie silently gets a *fresh* anonymous session + rotated cookie instead of crashing. Regression-tested (e2e 11/11b) and verified live against Neon |
+| 11 | A brand-new symbol could stay on "Establishing baseline" (`no_data_yet`) forever, baseline stuck `pending` with `last_computed_at = NULL` | If an add aborts **between** `ensureBaselineExists` (inserts the `pending` row) and the awaited `computeBaselineForSymbol`, the row is wedged: the poller never touches `pending` by design (`getRefreshableBaselineSymbols` excludes it) and later adds see `created:false` so they skip the compute. The "pending = compute in-flight" invariant quietly breaks on a crash abort — exactly what bug #10's FK crash did to WIPRO. Found while confirming a fresh WIPRO add | Recovered WIPRO in production by running the same production path (`fetchQuote` → `upsertSnapshot` → `computeBaselineForSymbol`) to `ready`. **Follow-up:** give `pending`-with-`last_computed_at IS NULL` self-healing (poller retry after a TTL, or add-path retry when `created:false` but still `pending`) |
 
 **The lesson for whoever picks this up:** paper review and planning caught
 the *big* architectural risks (race conditions, divide-by-zero, resilience
@@ -540,6 +541,26 @@ snapshot, baseline, users CASCADE`), re-verified live end-to-end:
   and returns the same watchlist. End-to-end incognito-browser click test
   is still worth doing by hand (item A below).
 
+**FULLY VERIFIED (2026-09-05) — including the fresh-symbol pipeline.**
+- MRF (added via the browser ~12:34Z, never in any earlier session)
+  confirmed the *normal* brand-new add flow live on Render itself:
+  baseline computed `ready` at 12:34:22Z from 20 real candles, snapshot
+  present at 12:39:30Z, renders ₹130,000. No manual intervention.
+- WIPRO exposed §8 bug #11: an add that crashed mid-flight (the orphaned-
+  cookie FK bug) left it `pending` with `last_computed_at = NULL`, and the
+  poller's closed-hours branch never creates a *first* snapshot (it only
+  re-flags symbols that already have one). A clean-slate re-add reports
+  `baselineTriggered:false` (row exists) so it can never self-heal. Fixed
+  in production via the exact production path — realProvider `fetchQuote`
+  → `upsertSnapshot` → `computeBaselineForSymbol` — to `ready`
+  (`WIPRO ₹176.40`, vol 0.0125, 20 days used); GET /watchlist now renders
+  a live card with a clean zero-diff first view (`finalScore 0`, reason
+  `ok`). The 30s-wait refresh does NOT produce this transition during
+  closed hours; a *normal* fresh add gets its snapshot at add-time instead.
+- **Deployment is now fully verified end to end:** every bug in §8 that
+  was open at the end of the last pass (#10 to #11) is fixed, documented,
+  and confirmed live. No known deployment blockers remain.
+
 **Open items (not blocking; none are deployment blockers):**
 - **A.** ~~Manual incognito click-test remaining.~~ **RESOLVED (2026-09-05):**
   the incognito add failure was bug #10 (orphaned session cookie -> FK
@@ -567,6 +588,10 @@ snapshot, baseline, users CASCADE`), re-verified live end-to-end:
   `poll_cycle_top_level_error` wasn't reachable from this CLI session;
   worth a 30-second glance in the Render Logs tab (none surfaced over
   HTTP during this pass — every probe returned an expected status code).
+- **F.** Self-healing for a wedged `pending` baseline (§8 bug #11):
+  currently needs manual repair. Wiring a retry for `pending` rows with
+  `last_computed_at IS NULL` (poller after a TTL, or add-path retry when
+  `created:false` but still `pending`) would make it automatic.
 
 Topology, following Section 6 exactly:
 - Neon or Supabase -> run `migrations/001_init.sql` against it -> get `DATABASE_URL`
