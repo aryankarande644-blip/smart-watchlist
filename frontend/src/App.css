@@ -577,16 +577,16 @@
   font-size: 0.8125rem;
 }
 
-/* ---- Auth page: dark stage + floating card (2026-09-06) ---- */
+/* ---- Auth page: photographed hero + floating card (2026-09-06) ---- */
 /* The hero IMAGE fills the full-width page behind everything, always
    proportionally: background-size:cover scales it to whatever the viewport
    is (4K, 1366x768, a non-maximized window) with no stretch and no gaps.
    Retina screens get the 2x export via a min-resolution media query; the 1x
-   pair is served to normal-DPI screens to save bandwidth. The image is
-   layered UNDER dark scrims (::before) that keep the left brand copy and the
-   card edges readable, while the light form card floats center-right on top
-   — dark stage remains visible around its top/bottom/right edges. The dark
-   ticker stays at the very top, above everything. */
+   pair is served to normal-DPI screens to save bandwidth. There is no
+   left-panel content — no logo, wordmark, tagline, value props or closing
+   line; the image IS the hero. The light form card floats center-right on
+   top (image shows around its top/bottom/right edges), and the dark ticker
+   pins across the very top. */
 .app--auth {
   background: var(--night); /* fallback while/as the hero image loads */
 }
@@ -595,10 +595,9 @@
   position: relative;
   flex: 1;
   display: flex;
+  justify-content: flex-end;
   align-items: stretch;
-  gap: clamp(2rem, 6vw, 6rem);
   padding: clamp(2.5rem, 6vh, 5rem) clamp(1.5rem, 5vw, 4.5rem) clamp(3rem, 8vh, 6rem);
-  color: var(--night-text);
   min-height: calc(100vh - var(--ticker-h, 39px));
 
   /* base: desktop composition at 1x */
@@ -614,88 +613,6 @@
   .auth-stage {
     background-image: url('./assets/tradeye-hero-desktop-2x.png');
   }
-}
-
-/* dark scrims over the image so the left copy and card edges stay legible;
-   the two radial accents keep the brand's teal ambience through the photo */
-.auth-stage::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  background:
-    radial-gradient(900px 520px at 12% -10%, rgba(45, 212, 170, 0.18), transparent 62%),
-    radial-gradient(760px 520px at 95% 115%, rgba(15, 138, 110, 0.18), transparent 60%),
-    linear-gradient(90deg, rgba(6, 12, 10, 0.92) 0%, rgba(6, 12, 10, 0.68) 40%, rgba(8, 14, 12, 0.42) 100%),
-    linear-gradient(180deg, rgba(5, 10, 8, 0.38) 0%, rgba(6, 12, 10, 0.6) 100%);
-}
-
-/* faint vertical grid overlay across the whole dark stage */
-.auth-stage::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  z-index: 1;
-  background: repeating-linear-gradient(
-    90deg,
-    transparent 0,
-    transparent 95px,
-    rgba(255, 255, 255, 0.025) 95px,
-    rgba(255, 255, 255, 0.025) 96px
-  );
-}
-
-/* Left: brand content on the dark background — big eye mark + lockup,
-   value props, closing line. Sits directly on the stage; no white panel. */
-.auth-hero {
-  position: relative;
-  z-index: 1;
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-  gap: 3.5rem;
-}
-
-.auth-hero__props {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 1.5rem;
-}
-
-.auth-hero__props li {
-  display: flex;
-  flex-direction: column;
-  gap: 0.3rem;
-}
-
-.auth-hero__props strong {
-  color: var(--teal-bright);
-  font-size: 0.75rem;
-  font-weight: 700;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-}
-
-.auth-hero__props span {
-  color: var(--night-muted);
-  font-size: 0.9375rem;
-  line-height: 1.55;
-  max-width: 38ch;
-}
-
-.auth-hero__closing {
-  margin: 0;
-  font-family: var(--font-display);
-  font-weight: 500;
-  font-size: clamp(1.4rem, 2.6vw, 2rem);
-  color: var(--teal-bright);
-  letter-spacing: -0.01em;
 }
 
 /* Right: the floating form card. The panel wrapper is only a positioning
@@ -721,24 +638,18 @@
     0 0 0 1px rgba(255, 255, 255, 0.06);
 }
 
-/* Narrow fallback: stack the brand content on top, the card full-width
-   beneath it (still centered, still on dark). Desktop-only original. */
+/* Narrow fallback: the card alone, full-width and vertically centered on
+   the portrait hero image (desktop-only image is desktop). */
 @media (max-width: 960px) {
   .auth-stage {
     flex-direction: column;
     align-items: stretch;
-    justify-content: flex-start;
-    gap: 2.75rem;
+    justify-content: center;
     padding: 2.25rem 1.5rem 3rem;
     min-height: calc(100vh - var(--ticker-h, 39px));
 
     background-image: url('./assets/tradeye-hero-mobile-1x.png');
     background-position: center top;
-  }
-
-  .auth-hero {
-    justify-content: flex-start;
-    gap: 2rem;
   }
 
   .auth-panel {

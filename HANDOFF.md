@@ -702,10 +702,10 @@ frontend/
     MarketRadar.jsx                  -- full-width Market Radar page: subtitle, last-updated (+ one-click add)
     Sparkline.jsx                    -- inline SVG "Last 7 Days" sparkline (shared by table + radar)
     AddSymbolForm.jsx                 -- debounced add, inline errors
-    AuthPage.jsx                       -- two-panel premium login/signup: dark hero (logo + value props + "Markets
-                                    --    move. You see more.") + light card (tabs, show/hide password, remember-me,
-                                    --    90-day vs browser-close, forgot-password placeholder, Google button,
-                                    --    ?auth_error= handling cleared from the URL)
+    AuthPage.jsx                       -- premium login/signup: light card floating center-right on the full-width
+                                    --    photographed hero (no left-panel text/logo). Card: tabs, show/hide password,
+                                    --    remember-me, 90-day vs browser-close, forgot-password placeholder, Google
+                                    --    button, ?auth_error= handling cleared from the URL
     ErrorBoundary.jsx                  -- React error boundary
     assets/                            -- photographed hero backgrounds, exported at 2x: tradeye-hero-desktop-{1x,2x}.png,
                                     --    tradeye-hero-mobile-{1x,2x}.png (1x = LANCZOS downscale of the 2x)
@@ -1008,43 +1008,40 @@ Real OAuth 2.0, not a fake button — full server-side redirect flow (§6):
   Cookie `HttpOnly; SameSite=Strict` posture unchanged; logout still bumps
   `session_version`. Tested against the real Set-Cookie header (e2e rm1–rm4).
 - **Frontend:** dark-teal brand pass. `Logo.jsx` (hand-drawn SVG eye +
-  rising candles wordmark, dark/light tones), two-panel `AuthPage.jsx` (dark
-  hero with value props + "Markets move. You see more." / light card with
+  rising candles wordmark, dark/light tones), `AuthPage.jsx` (light card on
+  the photographed hero with
   tabs, show-hide password, remember-me, `Forgot password?` placeholder not
   wired, Google button → `api.googleAuthUrl`), `TickerStrip` dark variant,
   `app--auth` dark shell, `?auth_error` handled and scrubbed from the URL.
-- **Hero refinement + floating-card layout (2026-09-06, after first deploy):**
-  the left-panel mark was replaced with a large (~150px) complex mark: a
-  two-tone almond eye silhouette (dark→bright teal gradient, upper/left
-  darker than lower/right), a dark iris lens behind six rising candlesticks
-  (alternating solid & hollow/outline candles in brand teal, wicks + dashed
-  trend line), and a thin tilted orbit ring extending past the eye corners
-  with a dot at one end — purely SVG/CSS, no raster asset, output scaled
-  automatically from `viewBox 0 0 260 170`. The layout is no longer a hard
-  50/50 two-panel split: the dark backdrop (logo, wordmark, tagline, Track/
-  Analyze/Radar, closing line) now spans the full page width, and the light
-  form card ("Welcome back" / Sign in / Sign up / Remember me / Forgot
-  password / Continue with Google) floats center-right on top of it with
-  real elevation (layered shadow + radius) so dark shows around its top,
-  bottom and right edges — no vertical seam. The dark ticker stays pinned
-  above everything. ≤960px the stage stacks: brand content on top, card
-  centered full-width below. Wordmark/tagline/value-props/closing-line copy
-  and all behavior unchanged. Verified via `npm run build` + rasterized SVG
-  geometry-sample checks (no browser available in this env — a manual
+- **Floating-card layout (2026-09-06, after first deploy):** the auth page
+  is no longer a hard 50/50 two-panel split. A complex SVG eye mark
+  (`Logo.jsx`, still used in the app sidebar — two-tone almond eye, six
+  solid/hollow rising candlesticks, dashed trend line, tilted orbit ring +
+  dot, `viewBox 0 0 260 170`) was designed for the left panel, then all
+  left-panel content (eye/wordmark/tagline, Track/Analyze/Radar, closing
+  line) was removed entirely — see the "Hero background photo" bullet for
+  the current state. The light form card (tabs, show/hide password,
+  remember-me, "Forgot password?" placeholder, Google button) floats
+  center-right with real elevation (layered shadow + radius) so the image
+  shows around its top, bottom and right edges. The dark ticker stays pinned
+  above everything; the card keeps its full behavior and the `?auth_error`
+  handling. Verified via `npm run build` (no browser in this env — a manual
   browser pass over login/signup tabs and a narrow viewport is the last
   visual check).
-- **Hero background photo (2026-09-06):** the full-width dark backdrop is now
-  a photographed hero image (`src/assets/`, exported by the owner at 2x). It
+- **Hero background photo (2026-09-06):** the full-width backdrop is a
+  photographed hero image (`src/assets/`, exported by the owner at 2x). It
   scales gracefully at ANY desktop resolution — `background-size: cover`
   + `background-position: center` fills the stage proportionally on 4K,
   1366×768 laptops, and non-maximized windows with zero stretching/gaps. On
   high-DPI screens a `@media (min-resolution: 2dppx)` query swaps in the 2x
   export (1758×895 / mobile 941×1672) for sharpness; normal-DPI screens get
   a LANCZOS-halved 1x twin (879×447 / 470×836) to save bandwidth. The ≤960px
-  rule swaps to the portrait mobile export (`center top`). The image sits
-  under dark scrims (`.auth-stage::before`: left-tinted + top/bottom
-  gradients + two teal radial accents) so the left brand copy and card edges
-  stay legible; the white card is completely opaque on top of it.
+  rule swaps to the portrait mobile export (`center top`). **All left-panel
+  text is gone** — no eye mark/wordmark/tagline, no Track/Analyze/Radar value
+  props, no "Markets move. You see more." closing; the image IS the hero, and
+  the white card floats center-right (`.auth-stage` `justify-content:
+  flex-end`, vertically centered) on the raw, un-scrimmed photo. The dark
+  ticker stays pinned at the very top.
 - **Forgot password = label only (title="Coming soon")**, NOT clickable —
   no email provider yet. This is the marked wiring point (+ email
   verification) when email infra lands; do NOT wire a fake reset.

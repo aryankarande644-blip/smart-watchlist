@@ -3,13 +3,11 @@
 // Dark-teal brand login/signup (2026-09-06). Rendered whenever a /watchlist
 // request comes back 401 — the server stopped trusting whatever cookie we had.
 //
-//   Layout: the dark backdrop spans the FULL page width — big two-tone eye
-//   mark + TRADEEYE wordmark + tagline at top-left, Track/Analyze/Radar value
-//   props, and the closing line "Markets move. You see more." at the bottom.
-//   The light form card FLOATS center-right on top of that background (dark
-//   stage peeks around its top/bottom/right edges, no vertical seam); on
-//   narrow screens the stage stacks and the card centers beneath the brand.
-//   The dark ticker pins across the very top.
+//   Layout: the photographed hero background fills the FULL page width and the
+//   light form card FLOATS center-right on top of it (background peeks around
+//   the card's top/bottom/right edges); the dark ticker pins across the very
+//   top. There is no left-panel text — the image is the hero. On narrow
+//   screens the card centers alone with reduced margins.
 //
 //   Card (light): "Welcome back" header + eyebrow, Sign in / Sign up tabs,
 //   email, password with show/hide, "Remember me" (real: 90-day cookie vs.
@@ -18,7 +16,6 @@
 //   the Google sign-in button (full redirect flow through /auth/google).
 import { useEffect, useState } from 'react';
 import { api } from './api';
-import { Logo } from './Logo';
 
 const MODE = { login: 'login', signup: 'signup' };
 
@@ -36,21 +33,6 @@ const MESSAGES = {
   google_callback_error: 'Google sign-in failed. Please try again.',
   provider_not_configured: 'Google sign-in isn\u2019t set up yet \u2014 sign in with your email and password instead.',
 };
-
-const VALUE_PROPS = [
-  {
-    title: 'Track',
-    body: 'Live NSE prices, volume vs. average, and 7-day sparklines on your watchlist.',
-  },
-  {
-    title: 'Analyze',
-    body: 'Meaningful-move signals tuned to each stock\u2019s own volatility, not a blanket threshold.',
-  },
-  {
-    title: 'Radar',
-    body: 'Top movers across the market surface outside your watchlist.',
-  },
-];
 
 export function AuthPage({ onAuthenticated }) {
   const [mode, setMode] = useState(MODE.login);
@@ -115,21 +97,6 @@ export function AuthPage({ onAuthenticated }) {
 
   return (
     <div className="auth-stage">
-      <section className="auth-hero" aria-label="About TRADEYE">
-        <Logo tone="dark" tagline stack />
-
-        <ul className="auth-hero__props">
-          {VALUE_PROPS.map((p) => (
-            <li key={p.title}>
-              <strong>{p.title}</strong>
-              <span>{p.body}</span>
-            </li>
-          ))}
-        </ul>
-
-        <p className="auth-hero__closing">Markets move. You see more.</p>
-      </section>
-
       <section className="auth-panel" aria-label="Sign in or create an account">
         <div className="auth-card">
           <p className="auth-card__eyebrow">Same market / a clearer view</p>
