@@ -602,6 +602,11 @@
    (same 250ms ease there and back); only colors change — no layout/size
    shift, and all controls stay clickable. */
 
+/* INTRO (v3 zip): on load only the BIG eye mark is visible center-screen; it
+   holds there ~1.7s, then minimizes back to its place (left 7% / top 35%) as
+   the wash, mountain, wordmark/tagline and login card fade in. All timings
+   match login-page-design.zip's globals.css. */
+
 .app--auth {
   background: var(--night); /* dark fallback only behind the auth-gate loader */
 }
@@ -690,6 +695,63 @@
 .brand-copy small span {
   color: #11a982;
   font-weight: 600;
+}
+
+/* ---- Intro animation: big centered logo → settles to place, content fades in.
+   Taken from the updated login-page-design.zip. Timing/durations match the
+   zip's globals.css. The login card (card-reveal) starts fading in just as
+   the logo settles. Reduced-motion kills all animations and ensures
+   everything is visible immediately. */
+.intro-brand {
+  animation: logo-settle 2.35s cubic-bezier(.22,.8,.24,1) both;
+  transform-origin: 18% 50%;
+}
+.intro-brand .eye-mark {
+  animation: logo-focus 1.4s cubic-bezier(.22,.8,.24,1) both;
+}
+.intro-copy {
+  opacity: 0;
+  animation: copy-reveal .7s ease-out 1.65s both;
+}
+.wash-reveal {
+  animation: wash-reveal 1.1s ease-out 1.15s both;
+}
+.scene-reveal {
+  animation: scene-reveal 1.2s ease-out 1.35s both;
+}
+.card-reveal {
+  opacity: 0;
+  animation: card-reveal .8s cubic-bezier(.22,.8,.24,1) 1.9s both;
+}
+@keyframes logo-settle {
+  0%   { left: 50%; top: 50%; transform: translate(-50%, -50%) scale(2.1); }
+  72%  { left: 50%; top: 50%; transform: translate(-50%, -50%) scale(2.1); }
+  100% { left: 7%;  top: 35%; transform: translateY(-50%) scale(1); }
+}
+@keyframes logo-focus {
+  0%, 52%  { filter: brightness(.9) contrast(1.7) saturate(1.35) drop-shadow(0 0 24px rgba(0,223,180,.7)); }
+  100%     { filter: brightness(.66) contrast(1.58) saturate(1.3) drop-shadow(7px 9px 4px rgba(0,18,22,.52)); }
+}
+@keyframes copy-reveal {
+  from { opacity: 0; transform: translateY(12px) scale(.96); }
+  to   { opacity: 1; transform: translateY(5px) scale(1); }
+}
+@keyframes wash-reveal {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+@keyframes scene-reveal {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+@keyframes card-reveal {
+  from { opacity: 0; transform: translateY(24px) scale(.98); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .intro-brand, .intro-brand .eye-mark, .intro-copy,
+  .wash-reveal, .scene-reveal, .card-reveal { animation: none; }
+  .intro-copy, .card-reveal { opacity: 1; }
 }
 
 /* Emerald "market mountain" artwork — v2 sizing from the zip's globals.css */
@@ -1064,9 +1126,6 @@
     left: -15%;
     right: -22%;
   }
-  .brand-lockup {
-    top: 32%;
-  }
 }
 
 @media (max-width: 520px) {
@@ -1074,8 +1133,6 @@
     padding: 1.5rem 1rem 2rem;
   }
   .brand-lockup {
-    top: 30%;
-    left: 6%;
     gap: 12px;
   }
   .brand-lockup .eye-mark {

@@ -86,7 +86,7 @@ function EyeMark() {
 // Glossy emerald mountain landscape — straight from the zip's app/page.tsx.
 function MarketArtwork() {
   return (
-    <div className="artwork" aria-hidden="true">
+    <div className="artwork scene-reveal" aria-hidden="true">
       <svg className="market-scene" viewBox="0 0 1000 520" preserveAspectRatio="none" role="img" aria-label="Glossy emerald mountain landscape">
         <defs>
           <linearGradient id="mountain-back" x1="0" y1="0" x2="0.9" y2="1"><stop stopColor="#000b10" /><stop offset=".56" stopColor="#001f25" /><stop offset="1" stopColor="#00564e" /></linearGradient>
@@ -183,10 +183,10 @@ export function AuthPage({ onAuthenticated }) {
       {/* Full-bleed dark hero stage: eye mark + wordmark + tagline + artwork.
           Everything here is layered and clipped at the stage's bounds. */}
       <div className="hero-stage">
-        <div className="visual-wash" aria-hidden="true" />
-        <div className="brand-lockup">
+        <div className="visual-wash wash-reveal" aria-hidden="true" />
+        <div className="brand-lockup intro-brand">
           <EyeMark />
-          <div className="brand-copy">
+          <div className="brand-copy intro-copy">
             <strong>TRADE<span>EYE</span></strong>
             <small>An <span>extra eye</span> on the market</small>
           </div>
@@ -196,7 +196,7 @@ export function AuthPage({ onAuthenticated }) {
 
       {/* Floating login card, center-right, over the hero. */}
       <section className="auth-panel" aria-label="Sign in or create an account">
-        <div className="auth-card">
+        <div className="auth-card card-reveal">
           <p className="form-kicker">{isLogin ? 'SECURE ACCESS' : 'JOIN TRADEYE'}</p>
           <p className="form-intro">
             {isLogin
