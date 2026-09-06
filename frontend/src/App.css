@@ -592,49 +592,53 @@
   font-size: 0.8125rem;
 }
 
-/* ---- Auth page: TRADEYE brand login (login-page-design.zip, 2026-09-06) ---- */
-/* The provided design ships the VISUAL half (eye mark, wordmark, emerald
-   "market mountain" artwork — app/page.tsx) plus the LOGIN CARD's styles
-   (app/globals.css) but no card markup in its page. The card here is rebuilt
-   from that CSS so the working sign-in form sits beside the artwork exactly
-   as the design intends. The layout is a two-column shell: the illustrated
-   brand stage fills the left pane, the light card centers in the right pane;
-   the dark ticker still pins across the top. On narrow screens the stages
-   stack vertically. */
+/* ---- Auth page: TRADEYE brand login (login-page-design.zip v2, 2026-09-06) ---- */
+/* FLOATING-CARD composition (the app's pre-v0 layout, not the v0 split):
+   the DARK hero stage spans the full page — eye mark + wordmark + tagline
+   mid-left, emerald "market mountain" artwork rising from the bottom — and
+   the light LOGIN CARD floats ON TOP, center-right, with hero visible around
+   its top/bottom/right edges and a soft elevation shadow. The card's colors
+   live in --ac-* custom properties so a :hover flips the WHOLE card to an
+   inverted near-black-green scheme (same 250ms ease there and back); only
+   colors change — no layout/size shift, and all controls stay clickable. */
 
 .app--auth {
-  background: var(--night); /* dark fallback while the light shell paints */
+  background: var(--night); /* dark fallback behind the hero */
 }
 
 .login-shell {
-  display: grid;
-  grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr);
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
   min-height: calc(100svh - var(--ticker-h, 39px));
-  overflow: hidden;
-  background: #f8fcfc;
+  background: var(--night);
 }
 
-/* Left: brand stage — eye mark + wordmark over a soft gradient, emerald
-   landscape rising from the bottom edge. */
-.visual-panel {
-  position: relative;
-  min-height: 100%;
+/* Full-bleed hero bed. Everything below is layered inside and clipped to it. */
+.hero-stage {
+  position: absolute;
+  inset: 0;
   overflow: hidden;
-  background: radial-gradient(circle at 45% 30%, #fff 0 12%, #e6f6f4 45%, #f1faf8 72%, #f8fcfc 100%);
-  background-color: #eef9f7;
+  isolation: isolate; /* keep the hero's internal z-indexes below the card */
+  background:
+    radial-gradient(1200px 720px at 26% 30%, rgba(45, 212, 170, 0.12), transparent 58%),
+    radial-gradient(1000px 760px at 80% 94%, rgba(0, 150, 128, 0.28), transparent 62%),
+    linear-gradient(165deg, #0a1513 0%, #0c1210 55%, #101c18 100%);
 }
 
 .visual-wash {
   position: absolute;
   inset: 0;
-  background: linear-gradient(110deg, rgba(224, 243, 242, 0.4), transparent 42%, rgba(255, 255, 255, 0.65) 82%);
+  pointer-events: none;
+  background: linear-gradient(110deg, rgba(16, 211, 160, 0.08), transparent 45%, rgba(255, 255, 255, 0.04) 82%);
 }
 
 .brand-lockup {
   position: absolute;
   z-index: 6;
   left: 7%;
-  top: 44%;
+  top: 35%;
   display: flex;
   flex-direction: column;
   align-items: flex-start;
@@ -643,10 +647,11 @@
   transform: translateY(-50%);
 }
 
+/* The eye mark is bright-fill enough to read on the dark stage */
 .brand-lockup .eye-mark {
-  width: clamp(155px, 17vw, 225px);
+  width: clamp(170px, 17vw, 235px);
   height: auto;
-  filter: brightness(0.66) contrast(1.58) saturate(1.3) drop-shadow(7px 9px 4px rgba(0, 18, 22, 0.52));
+  filter: brightness(1.08) saturate(1.35) contrast(1.05) drop-shadow(0 14px 26px rgba(0, 0, 0, 0.55));
   transform: translateZ(20px) rotate(-2deg);
 }
 
@@ -659,24 +664,24 @@
 }
 
 .brand-copy strong {
-  color: #07151b;
+  color: var(--night-text);
   font-family: 'Montserrat', var(--font-ui);
   font-size: clamp(22px, 2.65vw, 38px);
   text-align: center;
   font-weight: 500;
   letter-spacing: 0.2em;
   line-height: 0.9;
-  text-shadow: 0 1px 0 #fff, 0 2px 0 rgba(0, 0, 0, 0.22), 0 6px 13px rgba(0, 24, 30, 0.4), 0 -1px 3px rgba(255, 255, 255, 0.32);
+  text-shadow: 0 2px 14px rgba(0, 0, 0, 0.55);
   white-space: nowrap;
 }
 
 .brand-copy strong span {
-  color: #0b9f79;
-  text-shadow: 0 1px 0 rgba(239, 255, 250, 1), 0 2px 0 rgba(0, 55, 43, 0.48), 0 0 16px rgba(0, 196, 151, 0.58), 0 -1px 3px rgba(225, 255, 247, 0.42);
+  color: var(--teal-bright);
+  text-shadow: 0 0 18px rgba(45, 212, 170, 0.5), 0 2px 14px rgba(0, 0, 0, 0.6);
 }
 
 .brand-copy small {
-  color: #71808e;
+  color: var(--night-muted);
   font-family: 'Montserrat', var(--font-ui);
   font-size: clamp(9px, 0.82vw, 12px);
   font-weight: 500;
@@ -685,17 +690,18 @@
 }
 
 .brand-copy small span {
-  color: #11a982;
+  color: var(--teal-bright);
   font-weight: 600;
 }
 
+/* Emerald "market mountain" artwork — v2 sizing from the zip's globals.css */
 .artwork {
   position: absolute;
-  left: -16%;
-  right: -10%;
-  bottom: 0;
-  height: 70%;
-  min-height: 420px;
+  left: -12%;
+  right: -22%;
+  bottom: -8%;
+  height: 88%;
+  min-height: 490px;
   perspective: 900px;
   transform-style: preserve-3d;
 }
@@ -705,9 +711,9 @@
   inset: 0;
   width: 100%;
   height: 100%;
-  transform: rotateX(5deg) rotateY(-3deg) translateZ(12px) scaleX(1.08) scaleY(1.03);
-  transform-origin: 48% 80%;
-  filter: contrast(1.14) saturate(1.24) drop-shadow(0 22px 16px rgba(0, 38, 42, 0.24));
+  transform: rotateX(5deg) rotateY(-3deg) translateZ(20px) scaleX(1.14) scaleY(1.17);
+  transform-origin: 50% 88%;
+  filter: contrast(1.2) saturate(1.3) drop-shadow(0 28px 20px rgba(0, 38, 42, 0.3));
 }
 
 .artwork::after {
@@ -719,37 +725,108 @@
   bottom: 3%;
   height: 20%;
   pointer-events: none;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.22), transparent 30%, rgba(0, 72, 70, 0.16));
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.18), transparent 30%, rgba(0, 72, 70, 0.2));
   transform: perspective(500px) rotateX(68deg);
   transform-origin: bottom;
   opacity: 0.65;
-  mix-blend-mode: multiply;
+  mix-blend-mode: screen;
 }
 
-/* Right: the login card — rebuilt from the zip's .form-* styles. */
-.form-panel {
+/* Right: the floating login card. Only a positioning lane — the CARD is the
+   white, elevated, rounded box. */
+.auth-panel {
+  position: relative;
+  z-index: 2;
+  flex-shrink: 0;
+  width: clamp(360px, 31vw, 440px);
+  margin-right: clamp(1.5rem, 5vw, 4.5rem);
   display: flex;
-  align-items: center;
+  flex-direction: column;
   justify-content: center;
-  background: rgba(255, 255, 255, 0.97);
 }
 
-.form-wrap {
-  width: min(100%, 390px);
-  padding: 48px 40px;
+/* Card palette, fully driven by --ac-* custom properties so the hover
+   inversion only touches colors (never box size/border width -> no shift). */
+.auth-card {
+  --ac-bg: #ffffff;
+  --ac-text: #09322f;            /* h1 / body */
+  --ac-muted: #718787;           /* intro, signup */
+  --ac-faint: #9fb0ae;           /* kicker, legal, divider */
+  --ac-label: #4b6566;
+  --ac-accent: #008e77;          /* links / forgot / toggle */
+  --ac-accent-strong: #0a5643;
+  --ac-line: #dbe8e7;            /* input + divider borders */
+  --ac-input: #fbfefe;
+  --ac-input-text: #09282b;
+  --ac-placeholder: #a1b2b2;
+  --ac-focus: #00ae8d;
+  --ac-btn-bg: #063c3a;
+  --ac-btn-text: #ffffff;
+  --ac-btn-arrow: #4ff0c5;
+  --ac-btn-hover: #00695e;
+  --ac-google: #fbfefe;
+  --ac-google-text: #09282b;
+  --ac-error: var(--down);
+  --ac-checkbox: #00a884;
+
+  width: 100%;
+  background: var(--ac-bg);
+  border-radius: 18px;
+  padding: clamp(1.6rem, 2.6vw, 2.1rem);
+  box-shadow:
+    0 34px 80px -24px rgba(0, 0, 0, 0.72),
+    0 16px 34px -16px rgba(0, 0, 0, 0.55),
+    0 0 0 1px rgba(255, 255, 255, 0.08);
+}
+
+/* Hover: full color inversion — light card flips to a near-black green.
+   Guarded to real pointer/hover devices only so touch doesn't get stuck in
+   the inverted state. */
+@media (hover: hover) and (pointer: fine) {
+  .auth-card:hover {
+    --ac-bg: #041b18;
+    --ac-text: #eafffb;
+    --ac-muted: rgba(234, 255, 251, 0.66);
+    --ac-faint: rgba(234, 255, 251, 0.45);
+    --ac-label: rgba(234, 255, 251, 0.72);
+    --ac-accent: #4ff0c5;
+    --ac-accent-strong: #9bfce4;
+    --ac-line: rgba(255, 255, 255, 0.14);
+    --ac-input: rgba(255, 255, 255, 0.06);
+    --ac-input-text: #eafffb;
+    --ac-placeholder: rgba(234, 255, 251, 0.42);
+    --ac-focus: #4ff0c5;
+    --ac-btn-bg: #4ff0c5;
+    --ac-btn-text: #041b18;
+    --ac-btn-arrow: #063c3a;
+    --ac-btn-hover: #7cfadd;
+    --ac-google: rgba(255, 255, 255, 0.06);
+    --ac-google-text: #eafffb;
+    --ac-error: #ffb4b4;
+    --ac-checkbox: #4ff0c5;
+  }
+}
+
+/* Smooth 250ms color fade for every invertible surface on the card. NOTE:
+   transforms (arrow nudge, button lift) get their own transitions below so
+   the color fade never steps on them. */
+.auth-card,
+.auth-card input,
+.auth-card button {
+  transition: background-color 250ms ease, color 250ms ease, border-color 250ms ease, box-shadow 250ms ease;
 }
 
 .form-kicker {
   margin: 0 0 18px;
-  color: #8aa1a1;
+  color: var(--ac-faint);
   font-size: 10px;
   font-weight: 800;
   letter-spacing: 0.22em;
 }
 
-.form-wrap h1 {
+.auth-card h1 {
   margin: 0;
-  color: #07272b;
+  color: var(--ac-text);
   font-family: 'Montserrat', var(--font-ui);
   font-size: clamp(39px, 4vw, 55px);
   font-weight: 500;
@@ -757,13 +834,13 @@
   letter-spacing: -0.06em;
 }
 
-.form-wrap h1 span {
-  color: #00a884;
+.auth-card h1 span {
+  color: var(--ac-accent);
 }
 
 .form-intro {
-  margin: 19px 0 39px;
-  color: #718787;
+  margin: 14px 0 32px;
+  color: var(--ac-muted);
   font-size: 14px;
   line-height: 1.55;
 }
@@ -771,12 +848,12 @@
 .login-form {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
 }
 
 .login-form label,
 .password-row label {
-  color: #4b6566;
+  color: var(--ac-label);
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.03em;
@@ -793,23 +870,22 @@
   height: 48px;
   margin-bottom: 12px;
   padding: 0 15px;
-  border: 1px solid #dbe8e7;
+  border: 1px solid var(--ac-line);
   border-radius: 3px;
   outline: none;
-  background: #fbfefe;
-  color: #09282b;
+  background: var(--ac-input);
+  color: var(--ac-input-text);
   font: inherit;
   font-size: 13px;
-  transition: border-color 0.2s, box-shadow 0.2s;
 }
 
 .login-form input:focus {
-  border-color: #00ae8d;
-  box-shadow: 0 0 0 3px rgba(0, 174, 141, 0.12);
+  border-color: var(--ac-focus);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--ac-focus) 14%, transparent);
 }
 
 .login-form input::placeholder {
-  color: #a1b2b2;
+  color: var(--ac-placeholder);
 }
 
 /* Remember-me checkbox: shrink the generic input rules for checkboxes */
@@ -817,7 +893,7 @@
   width: 15px;
   height: 15px;
   margin: 0;
-  accent-color: #00a884;
+  accent-color: var(--ac-checkbox);
 }
 
 /* Password input + its Show/Hide toggle in one unit */
@@ -836,7 +912,7 @@
   transform: translateY(-50%);
   background: transparent;
   border: none;
-  color: #008e77;
+  color: var(--ac-accent);
   font-size: 0.75rem;
   font-weight: 600;
   cursor: pointer;
@@ -845,7 +921,7 @@
 }
 
 .auth__toggle:hover {
-  color: #0a5643;
+  color: var(--ac-accent-strong);
 }
 
 .auth__row {
@@ -861,7 +937,7 @@
   display: inline-flex;
   align-items: center;
   gap: 0.5rem;
-  color: #4b6566;
+  color: var(--ac-label);
   cursor: pointer;
   user-select: none;
 }
@@ -869,14 +945,14 @@
 /* Forgot password is a PLACEHOLDER pending email-provider setup (HANDOFF §10).
    Deliberately not an <a> / not clickable — "coming soon", not a dead link. */
 .auth__forgot {
-  color: #008e77;
+  color: var(--ac-accent);
   font-size: 11px;
   font-weight: 600;
 }
 
 .auth__error {
   margin: 0;
-  color: var(--down);
+  color: var(--ac-error);
   font-size: 12px;
   line-height: 1.4;
 }
@@ -891,18 +967,18 @@
   padding: 0 18px 0 20px;
   border: 0;
   border-radius: 4px;
-  background: #063c3a;
-  color: #fff;
+  background: var(--ac-btn-bg);
+  color: var(--ac-btn-text);
   cursor: pointer;
   font: inherit;
   font-size: 13px;
   font-weight: 700;
   letter-spacing: 0.03em;
-  transition: background 0.2s, transform 0.2s;
+  transition: background-color 250ms ease, color 250ms ease, transform 150ms ease;
 }
 
 .auth__submit:hover:not(:disabled) {
-  background: #00695e;
+  background: var(--ac-btn-hover);
   transform: translateY(-1px);
 }
 
@@ -912,10 +988,10 @@
 }
 
 .auth__arrow {
-  color: #4ff0c5;
+  color: var(--ac-btn-arrow);
   font-size: 22px;
   font-weight: 400;
-  transition: transform 0.12s ease;
+  transition: color 250ms ease, transform 120ms ease;
 }
 
 .auth__submit:hover:not(:disabled) .auth__arrow {
@@ -926,8 +1002,8 @@
   display: flex;
   align-items: center;
   gap: 0.9rem;
-  margin: 1.6rem 0 1.2rem;
-  color: #8aa1a1;
+  margin: 1.4rem 0 1.1rem;
+  color: var(--ac-faint);
   font-size: 10px;
   font-weight: 600;
   letter-spacing: 0.14em;
@@ -938,7 +1014,8 @@
   content: '';
   flex: 1;
   height: 1px;
-  background: #e4eeed;
+  background: var(--ac-line);
+  transition: background-color 250ms ease;
 }
 
 .auth__google {
@@ -948,25 +1025,24 @@
   gap: 0.65rem;
   width: 100%;
   height: 52px;
-  background: #fbfefe;
-  border: 1px solid #dbe8e7;
+  background: var(--ac-google);
+  border: 1px solid var(--ac-line);
   border-radius: 4px;
-  color: #09282b;
+  color: var(--ac-google-text);
   font-size: 13px;
   font-weight: 700;
   font-family: inherit;
   cursor: pointer;
-  transition: background 0.2s, border-color 0.2s;
 }
 
 .auth__google:hover {
-  background: #f2faf9;
-  border-color: #00ae8d;
+  background: var(--ac-input);
+  border-color: var(--ac-focus);
 }
 
 .signup {
   margin: 26px 0 0;
-  color: #718787;
+  color: var(--ac-muted);
   font-size: 12px;
   text-align: center;
 }
@@ -975,7 +1051,7 @@
   background: none;
   border: none;
   padding: 0;
-  color: #008e77;
+  color: var(--ac-accent);
   cursor: pointer;
   font-size: inherit;
   font-family: inherit;
@@ -985,21 +1061,19 @@
 }
 
 .legal {
-  margin: 64px 0 0;
-  color: #a1b1b1;
+  margin: 42px 0 0;
+  color: var(--ac-faint);
   font-size: 10px;
   line-height: 1.6;
   text-align: center;
 }
 
-/* Short desktop viewports: stop the card from vertically clipping in the
-   centered flex panel — let it top-align and tighten padding instead. */
+/* Short desktop viewports: stop the card from clipping in the centered flex
+   lane — top-align it and tighten padding instead. */
 @media (max-height: 780px) {
-  .form-panel {
+  .login-shell {
     align-items: flex-start;
-  }
-  .form-wrap {
-    padding: 30px 40px;
+    padding-top: 2.5rem;
   }
   .legal {
     margin-top: 44px;
@@ -1008,25 +1082,26 @@
 
 @media (max-width: 960px) {
   .login-shell {
-    grid-template-columns: 1fr;
-    overflow: visible;
+    justify-content: center;
+    padding: 2.25rem 1.5rem 3rem;
+    align-items: stretch;
   }
-  .visual-panel {
-    min-height: 44svh;
+  .auth-panel {
+    width: 100%;
+    margin-right: 0;
   }
-  .form-panel {
-    min-height: 56svh;
-    align-items: flex-start;
+  .auth-card {
+    max-width: 480px;
+    margin: 0 auto;
   }
   .artwork {
     height: 82%;
-    min-height: 260px;
+    min-height: 300px;
+    left: -15%;
+    right: -22%;
   }
   .brand-lockup {
-    top: 42%;
-  }
-  .form-wrap {
-    padding: 42px 28px;
+    top: 32%;
   }
   .legal {
     margin-top: 48px;
@@ -1034,15 +1109,16 @@
 }
 
 @media (max-width: 520px) {
-  .visual-panel {
-    min-height: 300px;
+  .login-shell {
+    padding: 1.5rem 1rem 2rem;
   }
   .brand-lockup {
+    top: 30%;
+    left: 6%;
     gap: 12px;
-    left: 7%;
   }
   .brand-lockup .eye-mark {
-    width: 94px;
+    width: 96px;
   }
   .brand-copy {
     gap: 5px;
@@ -1057,15 +1133,13 @@
     letter-spacing: 0.1em;
   }
   .artwork {
-    left: -15%;
-    right: -12%;
     height: 78%;
-    min-height: 260px;
+    min-height: 280px;
   }
-  .form-wrap {
-    padding: 35px 25px 28px;
+  .auth-card {
+    padding: 28px 24px;
   }
-  .form-wrap h1 {
+  .auth-card h1 {
     font-size: 40px;
   }
   .form-intro {

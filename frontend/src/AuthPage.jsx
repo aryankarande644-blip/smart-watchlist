@@ -3,13 +3,19 @@
 // TRADEYE brand login/signup (2026-09-06). Rendered whenever a /watchlist
 // request comes back 401 — the server stopped trusting whatever cookie we had.
 //
-// Layout comes from login-page-design.zip (v0.app export): a two-column
-// login-shell with an illustrated LEFT panel (the elaborate eye mark +
-// TRADEYE wordmark over a soft gradient, with the emerald "market mountain"
-// artwork rising from the bottom edge) and the RIGHT panel holding the LOGIN
-// CARD. The zip only shipped the visual half in JSX — the card markup here is
-// rebuilt from the card styles in its app/globals.css (form-panel, form-wrap,
-// login-form, password-row, signup, legal).
+// The composition comes from login-page-design.zip (v0.app export) tuned to
+// the app's FLOATING-CARD layout (like the pre-v0 photo hero, not the v0
+// two-column split the zip shipped):
+//
+//   - The DARK hero stage spans the FULL page width: the eye mark + TRADEYE
+//     wordmark + tagline float mid-left, and the emerald "market mountain"
+//     artwork rises from the bottom edge, clipped at the stage's bounds.
+//   - The light LOGIN CARD floats ON TOP, positioned center-right, so dark
+//     hero is visible around the card's top, bottom, and right edges. The
+//     card sits on a soft multi-layer shadow.
+//   - The card color-INVERTS on hover (light -> near-black green, text dark
+//     -> light green) via CSS custom properties with a 250ms ease fade. It is
+//     purely visual — no layout, size, or behavior changes.
 //
 // The card keeps every working auth feature: Sign in / Sign up mode toggle,
 // email, password with show/hide, "Remember me" (real: 90-day cookie vs.
@@ -174,8 +180,10 @@ export function AuthPage({ onAuthenticated }) {
 
   return (
     <main className="login-shell">
-      <section className="visual-panel" aria-label="TradeEye market visualization">
-        <div className="visual-wash" />
+      {/* Full-bleed dark hero stage: eye mark + wordmark + tagline + artwork.
+          Everything here is layered and clipped at the stage's bounds. */}
+      <div className="hero-stage">
+        <div className="visual-wash" aria-hidden="true" />
         <div className="brand-lockup">
           <EyeMark />
           <div className="brand-copy">
@@ -184,10 +192,11 @@ export function AuthPage({ onAuthenticated }) {
           </div>
         </div>
         <MarketArtwork />
-      </section>
+      </div>
 
-      <section className="form-panel" aria-label="Sign in or create an account">
-        <div className="form-wrap">
+      {/* Floating login card, center-right, over the hero. */}
+      <section className="auth-panel" aria-label="Sign in or create an account">
+        <div className="auth-card">
           <p className="form-kicker">{isLogin ? 'SECURE ACCESS' : 'JOIN TRADEYE'}</p>
           <h1>{isLogin ? 'Welcome back' : 'Create your account'}</h1>
           <p className="form-intro">
