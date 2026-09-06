@@ -577,37 +577,32 @@
   font-size: 0.8125rem;
 }
 
-/* ---- Auth page: dark-teal two-panel (2026-09-06) ---- */
-/* The whole unauthenticated shell goes dark; the right panel is the only
-   light card. The ticker strip sits dark on top, spanning full width. */
+/* ---- Auth page: dark stage + floating card (2026-09-06) ---- */
+/* The dark backdrop (eye logo, wordmark, value props, closing line) is now
+   the FULL-WIDTH page, not a left half. The light form card floats on it,
+   positioned center-right, with dark stage showing all the way around its
+   top, bottom and right edges — no vertical seam. The dark ticker stays at
+   the very top, above everything. */
 .app--auth {
-  background: var(--night);
-}
-
-.auth-split {
-  flex: 1;
-  display: grid;
-  grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
-  min-height: calc(100vh - var(--ticker-h, 39px));
-}
-
-/* Left hero: deep charcoal, subtle teal glow, brand lockup + props + close */
-.auth-hero {
-  position: relative;
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-  gap: 2.5rem;
-  padding: clamp(2rem, 5vw, 4rem);
-  color: var(--night-text);
   background:
     radial-gradient(900px 520px at 12% -10%, rgba(45, 212, 170, 0.16), transparent 62%),
-    radial-gradient(700px 480px at 90% 110%, rgba(15, 138, 110, 0.14), transparent 60%),
+    radial-gradient(760px 520px at 95% 115%, rgba(15, 138, 110, 0.16), transparent 60%),
     linear-gradient(180deg, var(--night) 0%, #0a0f0d 100%);
 }
 
-.auth-hero::after {
+.auth-stage {
+  position: relative;
+  flex: 1;
+  display: flex;
+  align-items: stretch;
+  gap: clamp(2rem, 6vw, 6rem);
+  padding: clamp(2.5rem, 6vh, 5rem) clamp(1.5rem, 5vw, 4.5rem) clamp(3rem, 8vh, 6rem);
+  color: var(--night-text);
+  min-height: calc(100vh - var(--ticker-h, 39px));
+}
+
+/* faint vertical grid overlay across the whole dark stage */
+.auth-stage::after {
   content: '';
   position: absolute;
   inset: 0;
@@ -621,9 +616,17 @@
   );
 }
 
-.auth-hero > * {
+/* Left: brand content on the dark background — big eye mark + lockup,
+   value props, closing line. Sits directly on the stage; no white panel. */
+.auth-hero {
   position: relative;
   z-index: 1;
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 3.5rem;
 }
 
 .auth-hero__props {
@@ -665,18 +668,55 @@
   letter-spacing: -0.01em;
 }
 
-/* Right panel: the actual form card on white */
+/* Right: the floating form card. The panel wrapper is only a positioning
+   lane — the CARD itself is the white, elevated, rounded box. */
 .auth-panel {
+  position: relative;
+  z-index: 1;
+  flex-shrink: 0;
+  width: clamp(340px, 27vw, 430px);
   display: flex;
-  align-items: center;
+  flex-direction: column;
   justify-content: center;
-  padding: clamp(2rem, 4vw, 3.5rem) 2rem;
-  background: var(--paper);
 }
 
 .auth-card {
   width: 100%;
-  max-width: 400px;
+  background: var(--paper);
+  border-radius: 18px;
+  padding: clamp(1.75rem, 3vw, 2.5rem);
+  box-shadow:
+    0 30px 70px -25px rgba(0, 0, 0, 0.65),
+    0 12px 28px -14px rgba(0, 0, 0, 0.5),
+    0 0 0 1px rgba(255, 255, 255, 0.06);
+}
+
+/* Narrow fallback: stack the brand content on top, the card full-width
+   beneath it (still centered, still on dark). Desktop-only original. */
+@media (max-width: 960px) {
+  .auth-stage {
+    flex-direction: column;
+    align-items: stretch;
+    justify-content: flex-start;
+    gap: 2.75rem;
+    padding: 2.25rem 1.5rem 3rem;
+    min-height: calc(100vh - var(--ticker-h, 39px));
+  }
+
+  .auth-hero {
+    justify-content: flex-start;
+    gap: 2rem;
+  }
+
+  .auth-panel {
+    width: 100%;
+    display: block;
+  }
+
+  .auth-card {
+    max-width: 440px;
+    margin: 0 auto;
+  }
 }
 
 .auth-card__eyebrow {
@@ -937,7 +977,12 @@
   --logo-outline: var(--ink);
   --logo-candle: var(--teal);
   --logo-trend: rgba(15, 138, 110, 0.45);
-  --logo-iris: rgba(15, 138, 110, 0.1);
+  --logo-iris: #0d1712;                 /* dark lens behind the candles */
+  --logo-candle-dim: rgba(15, 138, 110, 0.55);
+  --logo-orbit: rgba(15, 138, 110, 0.4);
+  --logo-orbit-dot: var(--teal);
+  --logo-almond-dark: var(--teal-deep);
+  --logo-almond-bright: var(--teal);
   --logo-word: var(--ink);
   --logo-eyespot: var(--teal);
   --logo-tag: var(--muted);
@@ -947,7 +992,12 @@
   --logo-outline: rgba(231, 241, 236, 0.92);
   --logo-candle: var(--teal-bright);
   --logo-trend: rgba(45, 212, 170, 0.5);
-  --logo-iris: rgba(45, 212, 170, 0.1);
+  --logo-iris: #071410;
+  --logo-candle-dim: rgba(45, 212, 170, 0.55);
+  --logo-orbit: rgba(45, 212, 170, 0.45);
+  --logo-orbit-dot: var(--teal-bright);
+  --logo-almond-dark: #0a5643;
+  --logo-almond-bright: #1fb493;
   --logo-word: var(--night-text);
   --logo-eyespot: var(--teal-bright);
   --logo-tag: var(--night-muted);
@@ -955,6 +1005,18 @@
 
 .eye-mark__almond {
   stroke: var(--logo-outline);
+  stroke-width: 1.4;
+  stroke-linejoin: round;
+  fill: url('#tradEyeAlmond');
+}
+
+.eye-mark__orbit {
+  stroke: var(--logo-orbit);
+  stroke-width: 1.1;
+}
+
+.eye-mark__orbit-dot {
+  fill: var(--logo-orbit-dot);
 }
 
 .eye-mark__iris {
@@ -963,14 +1025,26 @@
 
 .eye-mark__wick {
   stroke: var(--logo-candle);
+  stroke-width: 2;
+  stroke-linecap: round;
 }
 
 .eye-mark__body {
   fill: var(--logo-candle);
 }
 
+.eye-mark__body--hollow {
+  fill: none;
+  stroke: var(--logo-candle-dim);
+  stroke-width: 1.5;
+}
+
 .eye-mark__trend {
   stroke: var(--logo-trend);
+  stroke-width: 1.4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-dasharray: 4 3;
 }
 
 .logo__text {
@@ -1007,6 +1081,18 @@
 
 .logo--compact .logo__tag {
   font-size: 0.72rem;
+}
+
+/* Stacked hero composition: big mark on top, wordmark + tagline centered
+   beneath it — exactly the login hero's brand cluster. */
+.logo--stack {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1.1rem;
+}
+
+.logo--stack .logo__text {
+  align-items: flex-start;
 }
 
 /* Sidebar brand uses the compact light lockup */

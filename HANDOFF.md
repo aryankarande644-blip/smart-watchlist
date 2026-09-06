@@ -694,7 +694,9 @@ frontend/
     App.jsx                        -- nav state (activeView), sidebar nav + compact logo, avatar, watchlist table,
                                 --    dark `app--auth` shell (dark ticker + AuthPage) when unauthenticated
     api.js                          -- thin fetch client matching Section 5 exactly (incl. remember + googleAuthUrl)
-    Logo.jsx                        -- hand-drawn SVG eye/candlestick TRADEYE lockup (dark + light tones)
+    Logo.jsx                        -- hand-drawn SVG TRADEYE lockup: two-tone almond eye (candlestick bars
+                                --    + orbit ring/dot), color-split wordmark; dark/light tones; stacked
+                                --    hero variant + compact sidebar variant
     TickerStrip.jsx                 -- top sticky NIFTY/SENSEX strip (public /indices; light + dark variant)
     WatchlistRow.jsx                 -- table row: Stock/Price/Change/Volume/Signal/Sparkline
     MarketRadar.jsx                  -- full-width Market Radar page: subtitle, last-updated (+ one-click add)
@@ -1009,6 +1011,26 @@ Real OAuth 2.0, not a fake button — full server-side redirect flow (§6):
   tabs, show-hide password, remember-me, `Forgot password?` placeholder not
   wired, Google button → `api.googleAuthUrl`), `TickerStrip` dark variant,
   `app--auth` dark shell, `?auth_error` handled and scrubbed from the URL.
+- **Hero refinement + floating-card layout (2026-09-06, after first deploy):**
+  the left-panel mark was replaced with a large (~150px) complex mark: a
+  two-tone almond eye silhouette (dark→bright teal gradient, upper/left
+  darker than lower/right), a dark iris lens behind six rising candlesticks
+  (alternating solid & hollow/outline candles in brand teal, wicks + dashed
+  trend line), and a thin tilted orbit ring extending past the eye corners
+  with a dot at one end — purely SVG/CSS, no raster asset, output scaled
+  automatically from `viewBox 0 0 260 170`. The layout is no longer a hard
+  50/50 two-panel split: the dark backdrop (logo, wordmark, tagline, Track/
+  Analyze/Radar, closing line) now spans the full page width, and the light
+  form card ("Welcome back" / Sign in / Sign up / Remember me / Forgot
+  password / Continue with Google) floats center-right on top of it with
+  real elevation (layered shadow + radius) so dark shows around its top,
+  bottom and right edges — no vertical seam. The dark ticker stays pinned
+  above everything. ≤960px the stage stacks: brand content on top, card
+  centered full-width below. Wordmark/tagline/value-props/closing-line copy
+  and all behavior unchanged. Verified via `npm run build` + rasterized SVG
+  geometry-sample checks (no browser available in this env — a manual
+  browser pass over login/signup tabs and a narrow viewport is the last
+  visual check).
 - **Forgot password = label only (title="Coming soon")**, NOT clickable —
   no email provider yet. This is the marked wiring point (+ email
   verification) when email infra lands; do NOT wire a fake reset.

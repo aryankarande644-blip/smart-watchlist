@@ -1,19 +1,21 @@
 // src/AuthPage.jsx
 //
-// Two-panel premium login/signup (dark-teal brand pass, 2026-09-06). Rendered
-// whenever a /watchlist request comes back 401 — the server stopped trusting
-// whatever cookie we had.
+// Dark-teal brand login/signup (2026-09-06). Rendered whenever a /watchlist
+// request comes back 401 — the server stopped trusting whatever cookie we had.
 //
-//   Left (hero, dark):  eye/candlestick logo mark + TRADEYE wordmark + tagline,
-//                       three value props drawn from the ACTUAL product, and
-//                       the closing line "Markets move. You see more."
-//   Right (card):       "Welcome back" header + eyebrow, Sign in / Sign up
-//                       tabs, email, password with show/hide, "Remember me"
-//                       (real: 90-day cookie vs. browser-close), "Forgot
-//                       password?" (placeholder pending email provider — NOT
-//                       wired), primary dark arrow button, "OR CONTINUE WITH"
-//                       divider, and the Google sign-in button (full redirect
-//                       flow through /auth/google).
+//   Layout: the dark backdrop spans the FULL page width — big two-tone eye
+//   mark + TRADEEYE wordmark + tagline at top-left, Track/Analyze/Radar value
+//   props, and the closing line "Markets move. You see more." at the bottom.
+//   The light form card FLOATS center-right on top of that background (dark
+//   stage peeks around its top/bottom/right edges, no vertical seam); on
+//   narrow screens the stage stacks and the card centers beneath the brand.
+//   The dark ticker pins across the very top.
+//
+//   Card (light): "Welcome back" header + eyebrow, Sign in / Sign up tabs,
+//   email, password with show/hide, "Remember me" (real: 90-day cookie vs.
+//   browser-close), "Forgot password?" (placeholder pending email provider —
+//   NOT wired), primary dark arrow button, "OR CONTINUE WITH" divider, and
+//   the Google sign-in button (full redirect flow through /auth/google).
 import { useEffect, useState } from 'react';
 import { api } from './api';
 import { Logo } from './Logo';
@@ -112,9 +114,9 @@ export function AuthPage({ onAuthenticated }) {
   }
 
   return (
-    <div className="auth-split">
+    <div className="auth-stage">
       <section className="auth-hero" aria-label="About TRADEYE">
-        <Logo tone="dark" tagline />
+        <Logo tone="dark" tagline stack />
 
         <ul className="auth-hero__props">
           {VALUE_PROPS.map((p) => (
