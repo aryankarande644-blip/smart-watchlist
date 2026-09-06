@@ -162,6 +162,32 @@ export function App() {
     );
   }
 
+  // The authenticated shell (side nav, masthead, avatar, log out, and content
+  // view) is rendered ONLY when we've confirmed the session. authed===null
+  // means the /watchlist probe is still in flight -> the neutral full-page
+  // loader below, so no part of the app frame — not just the inner list —
+  // can flash before auth status is known.
+  if (authed === null) {
+    return (
+      <div className="app app--auth">
+        <TickerStrip variant="dark" />
+        <div className="state state--loading state--auth-gate">
+          {connectionError ? (
+            <>
+              <p>Can&apos;t reach the server.</p>
+              <button type="button" className="auth__link" onClick={() => { setConnectionError(false); refresh(); }}>
+                Retry
+              </button>
+            </>
+          ) : (
+            <p>Checking authentication&hellip;</p>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // Only reachable when authed === true — the entire authenticated shell.
   const initials = initialsFor(userEmail);
 
   return (
@@ -221,10 +247,6 @@ export function App() {
 
           {activeView === 'watchlist' ? (
             <main className="view">
-              {authed === null && items === null && !connectionError && (
-                <div className="state state--loading">Loading your watchlist…</div>
-              )}
-
               {items !== null && items.length === 0 && (
                 <div className="state state--empty">
                   <p>Nothing here yet.</p>

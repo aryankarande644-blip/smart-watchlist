@@ -69,6 +69,9 @@ export function AuthPage({ onAuthenticated }) {
       }
       onAuthenticated(email);
     } catch (err) {
+      // Structured client-side log so auth failures are visible in the browser
+      // console even when the UI message is generic.
+      console.error(JSON.stringify({ event: 'auth_action_failed', action: isLogin ? 'login' : 'signup', code: err.code, status: err.status, message: err.message }));
       setError(MESSAGES[err.code] || err.message || 'Something went wrong.');
     } finally {
       setPending(false);

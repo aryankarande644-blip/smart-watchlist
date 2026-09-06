@@ -9,6 +9,32 @@ let state = {
   lastRouteError: null, // { name, message, code, stack, route, at }
 };
 
+// Ring buffer of recent auth events (newest first). Exposed via /health so
+// the developer can see exactly what happened on a failed login/signup even
+// without Render log access. Logged to console on every event so Render's
+// log stream also captures it in real time.
+const MAX_AUTH_EVENTS = 20;
+let authEvents = [];
+
+function recordAuthEvent({ event, email, code, ip, route }) {
+  const entry = {
+    event,
+    code: code || undefined,
+    email: email || undefined,
+    ip: ip || undefined,
+    route: route || undefined,
+    at: new Date().toISOString(),
+  };
+  authEvents = [entry, ...authEvents].slice(0, MAX_AUTH_EVENTS);
+  // Structured log so Render's log stream always has a searchable record.
+  console.log(JSON.stringify(entry));
+  return entry;
+}
+
+function getDiagnostics() {
+  return { ...state, authEvents };
+}
+
 function recordQuoteError(err) {
   state.lastQuoteError = {
     name: err && err.name ? err.name : 'Error',
@@ -34,8 +60,4 @@ function clearQuoteError() {
   state.lastQuoteError = null;
 }
 
-function getDiagnostics() {
-  return state;
-}
-
-module.exports = { recordQuoteError, clearQuoteError, recordRouteError, getDiagnostics };
+module.exports = { recordQuoteError, clearQuoteError, recordRouteError, recordAuthEvent, getDiagnostics };

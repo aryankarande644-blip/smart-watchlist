@@ -278,8 +278,14 @@ POST /watchlist/:symbol/ack   body: { snapshotToken: string }
   -- (the client-echoed token is a UX nicety, not a trust mechanism)
 
 GET /health
-  -> 200 { status: 'ok', db: 'ok', poller: {...}, marketDataCircuit: 'closed' }
+  -> 200 { status: 'ok', db: 'ok', poller: {...}, marketDataCircuit: 'closed',
+           lastQuoteError, lastRouteError, authEvents: [...] }
   -> 503 { status: 'degraded', ... }   -- if DB unreachable OR circuit breaker open
+  -- authEvents: ring buffer (newest first, max 20) of every login/signup
+     outcome + session rejection, visible without Render log access:
+     auth_login_success, auth_login_invalid, auth_login_rate_limited,
+     auth_signup_success, auth_signup_email_taken, session_rejected.
+     Each entry has { event, email?, code?, ip?, route?, at }.
 
 GET /indices   -- public (mounted before session middleware, like /health);
                 -- powers the top ticker strip. Reads the poller's cache.
@@ -346,7 +352,11 @@ boundary, not a hidden bug). That model is now replaced by real accounts:
   `401 invalid_credentials` for wrong password *or* unknown email — plus a
   dummy bcrypt compare so timing doesn't leak account existence),
   `POST /auth/logout` (revokes + clears). Login is rate-limited per IP
-  (10 per 15 min sliding window).
+  (10 per 15 min sliding window). Every login/signup success, failure,
+  rate-limit, and stale-session rejection is logged to console (structured
+  JSON, visible in Render logs) and recorded in the `authEvents` ring buffer
+  exposed by `/health` — the original bug where a real user couldn't log in
+  but no server-side trail existed is now structurally impossible to miss.
 - **Why:** persistent watchlists across devices was a hard product gap of
   the cookie-only model. **Still explicitly deferred, not forgotten:** email
   verification and GitHub/other OAuth. Google OAuth itself is now DONE
@@ -630,6 +640,9 @@ src/
       server.js                   -- Express app wiring, graceful shutdown, provider selection,
                                 --    configurable poll interval, CSRF origin check, baseline refresher,
                                 --    Google OAuth client built from env (null => provider_not_configured)
+      diagnostics.js             -- shared diagnostics bag: lastQuoteError, lastRouteError,
+                                --    authEvents ring buffer (20-entry, newest first) — exposed via /health
+                                --    for live diagnosis without Render log access
       auth/
         passwords.js              -- bcrypt hash/verify (cost 10, DUMMY_HASH for anti-enumeration)
         rateLimit.js              -- per-IP sliding-window login limiter
@@ -681,8 +694,8 @@ src/
                                           --    provider-not-configured degradation, google_denied cancel)
       radarBadge.test.js                    -- 13 tests (pure badge-mapping cases + boundaries)
       radar.e2e.test.js                     -- 8 tests (exclusion, top-5 sort, badge mapping, 401)
-      e2e.test.js                       -- 39 tests (real HTTP server + Postgres, incl. /indices + table fields
-                                         --    + remember-me cookie contract rm1-rm4)
+      e2e.test.js                       -- 44 tests (real HTTP server + Postgres, incl. /indices + table fields
+                                         --    + remember-me cookie contract rm1-rm4 + auth diagnostics 10-12)
       run.js                             -- runs all suites in sequence
 
 frontend/
@@ -719,7 +732,7 @@ psql -f backend/migrations/001_init.sql
 
 cd backend
 npm install
-npm test                          # 248 tests across 13 suites, needs Postgres reachable
+npm test                          # 253 tests across 13 suites, needs Postgres reachable
 DATABASE_URL=... MARKET_DATA_PROVIDER=demo npm start   # runs on :3001
 
 cd ../frontend
@@ -1053,7 +1066,7 @@ Real OAuth 2.0, not a fake button — full server-side redirect flow (§6):
 - **Tests:** `googleOAuth.test.js` (23) + `oauth.e2e.test.js` (22, full
   redirect flow against a fake Google — incl. tests 9/9b pinning the
   unconfigured-provider degradation and test 10 pinning the consent-cancel
-  path) + remember-me tests rm1–rm4. Full suite: **248 tests, 0 failures.**
+  path) + remember-me tests rm1–rm4. Full suite: **253 tests, 0 failures.**
   Frontend production build clean.
 
 ---

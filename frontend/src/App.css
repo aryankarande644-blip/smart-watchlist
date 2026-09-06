@@ -269,6 +269,21 @@
   font-size: 0.9375rem;
 }
 
+/* Neutral loading screen shown while the initial auth check is in flight.
+   Visible only when authed===null; takes the full remaining viewport height
+   so no protected content flashes before the server responds. */
+.state--auth-gate {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  height: calc(100vh - var(--ticker-h, 39px));
+  color: var(--paper);
+  font-size: 1rem;
+  text-align: center;
+}
+
 .state--empty p {
   margin: 0 0 0.35rem;
   color: var(--ink);

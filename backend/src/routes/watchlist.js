@@ -4,7 +4,7 @@ const repo = require('../db/repository');
 const { computeDiff } = require('../diffEngine');
 const { computeBaselineForSymbol } = require('../baseline/computeBaseline');
 const { isUpstreamError } = require('../marketData/client');
-const { recordQuoteError, clearQuoteError } = require('../diagnostics');
+const { recordQuoteError, clearQuoteError, recordAuthEvent } = require('../diagnostics');
 
 function createWatchlistRouter({ marketDataClient }) {
 const router = express.Router();
@@ -12,8 +12,14 @@ const router = express.Router();
 // Everything under /watchlist requires a real session. No cookie, invalid
 // signature, or a cookie whose user row is gone => 401, never a silently
 // minted account (the anonymous-session model was superseded by /auth).
+// When a cookie WAS present but the session was stale/invalid, log the
+// rejection so session-persistence failures are diagnosable.
 router.use((req, res, next) => {
   if (!req.userId) {
+    if (req.cookies?.session_uid) {
+      const ip = req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.ip || 'unknown';
+      recordAuthEvent({ event: 'session_rejected', ip, route: `${req.method} ${req.originalUrl}` });
+    }
     return res.status(401).json({ error: { code: 'not_authenticated', message: 'sign in required' } });
   }
   next();

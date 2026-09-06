@@ -18,6 +18,10 @@ async function request(path, options = {}) {
     const err = new Error(body.error?.message || 'Request failed');
     err.code = body.error?.code;
     err.status = res.status;
+    // Structured client-side log so the developer can see the exact server
+    // response in their own browser console — invaluable for diagnosing
+    // auth failures that don't surface clearly in the UI.
+    console.error(JSON.stringify({ event: 'api_error', path, status: res.status, code: err.code, message: err.message }));
     throw err;
   }
 

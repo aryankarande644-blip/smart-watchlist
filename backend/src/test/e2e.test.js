@@ -381,9 +381,49 @@ async function run() {
     const listBody3 = await listRes3.json();
     assertTrue('8b. Symbol no longer in watchlist after delete', listBody3.items.length === 0, listBody3);
 
-    // ---- Orphaned cookie: valid signature but the user row is gone. The new
-    // model must answer 401, never crash (FK 23503 regression from bug #10)
-    // and never mint a replacement anonymous account. ----
+    // ---- Auth diagnostics: every login/signup outcome must appear in
+    // /health's authEvents ring buffer so failed attempts are diagnosable
+    // without Render log access. This MUST run before the orphan tests
+    // below, which delete all users destructively. ----
+
+    // 1) Both invalid-login and successful-login events must exist in the ring
+    //    buffer by this point — the order depends on how many other auth events
+    //    (signups, other logins) were recorded, so just confirm presence.
+    const healthAfterAuth = await (await fetch(`${base}/health`)).json();
+    const events = healthAfterAuth.authEvents || [];
+    const eventTypes = events.map((e) => e.event);
+    assertTrue(
+      '10. /health exposes an authEvents array after auth activity',
+      Array.isArray(events) && events.length > 0,
+      events
+    );
+    assertTrue(
+      '10b. auth_login_invalid was recorded for the wrong-password attempt',
+      eventTypes.includes('auth_login_invalid'),
+      eventTypes
+    );
+    assertTrue(
+      '10c. auth_login_success was recorded for the correct login',
+      eventTypes.includes('auth_login_success'),
+      eventTypes
+    );
+
+    // 2) Re-authenticate alice, then check the newest event has email + ip.
+    const freshLogin = await fetch(`${base}/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: 'alice@example.com', password: 'alice-password-1' }),
+    });
+    const freshHealth = await (await fetch(`${base}/health`)).json();
+    const newest = freshHealth.authEvents[0];
+    assertTrue(
+      '11. Newest auth event has the logged-in email',
+      newest.event === 'auth_login_success' && newest.email === 'alice@example.com',
+      newest
+    );
+
+    // 3) Session rejection: a cookie with a valid signature but a stale
+    //    session_version must appear in the buffer as session_rejected.
     const orphanSetup = await fetch(`${base}/auth/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -391,7 +431,26 @@ async function run() {
     });
     const orphanCookie = cookieFrom(orphanSetup);
     await pool.query('DELETE FROM users'); // orphan every session
-    const orphanRes = await fetch(`${base}/watchlist`, { headers: { Cookie: orphanCookie } });
+    await fetch(`${base}/watchlist`, { headers: { Cookie: orphanCookie } });
+    const staleHealth = await (await fetch(`${base}/health`)).json();
+    const staleEvent = staleHealth.authEvents.find((e) => e.event === 'session_rejected');
+    assertTrue(
+      '12. Stale session cookie produces a session_rejected diagnostic event',
+      !!staleEvent,
+      staleHealth.authEvents.slice(0, 5)
+    );
+
+    // ---- Orphaned cookie: valid signature but the user row is gone. The new
+    // model must answer 401, never crash (FK 23503 regression from bug #10)
+    // and never mint a replacement anonymous account. ----
+    const orphanSetup2 = await fetch(`${base}/auth/signup`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: 'orphan@test.com', password: 'orphan-pass-123' }),
+    });
+    const orphanCookie2 = cookieFrom(orphanSetup2);
+    await pool.query('DELETE FROM users'); // orphan every session
+    const orphanRes = await fetch(`${base}/watchlist`, { headers: { Cookie: orphanCookie2 } });
     const orphanBody = await orphanRes.json();
     assertTrue(
       '9. Orphaned-cookie request returns 401, not a 500 (bug #10 regression)',

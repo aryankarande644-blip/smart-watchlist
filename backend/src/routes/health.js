@@ -17,7 +17,7 @@ function createHealthRouter({ poller, marketDataClient }) {
 
     const pollerStatus = poller.getStatus();
     const circuitState = marketDataClient.getCircuitState();
-    const { lastQuoteError, lastRouteError } = getDiagnostics();
+    const { lastQuoteError, lastRouteError, authEvents } = getDiagnostics();
 
     const healthy = dbOk && circuitState !== 'open';
 
@@ -31,6 +31,7 @@ function createHealthRouter({ poller, marketDataClient }) {
       marketDataCircuit: circuitState,
       lastQuoteError,
       lastRouteError,
+      authEvents,
     });
   });
 

@@ -5,6 +5,7 @@ const { hashPassword, verifyPassword } = require('../auth/passwords');
 const { createLimiter } = require('../auth/rateLimit');
 const { createStateStore } = require('../auth/oauthState');
 const { setSessionCookie, clearSessionCookie, readSession } = require('./session');
+const { recordAuthEvent } = require('../diagnostics');
 
 // Loose but real shape check: something@something.tld, max 254 chars (RFC
 // 5321 address length). Full RFC validation is out of scope — this exists to
@@ -26,6 +27,13 @@ function errorResponse(res, status, code, message) {
 
 function normalizeEmail(email) {
   return String(email || '').trim().toLowerCase();
+}
+
+// Extract the real client IP from behind Render's proxy.
+function clientIp(req) {
+  const fwd = req.headers['x-forwarded-for'];
+  if (fwd) return fwd.split(',')[0].trim();
+  return req.ip || 'unknown';
 }
 
 // Google OAuth account resolution (owner decision 2026-09-06):
@@ -84,11 +92,13 @@ function createAuthRouter({ loginRateLimit = {}, google = null, stateStore = nul
         // unique_violation on users.email — a second account already claimed it
         // (whether via email/password signup OR a Google-authenticated account).
         if (err && err.code === '23505') {
+          recordAuthEvent({ event: 'auth_signup_email_taken', email, ip: clientIp(req), code: 'email_taken', route: 'POST /auth/signup' });
           return errorResponse(res, 409, 'email_taken', 'an account with this email already exists');
         }
         throw err;
       }
 
+      recordAuthEvent({ event: 'auth_signup_success', email, ip: clientIp(req), route: 'POST /auth/signup' });
       setSessionCookie(res, user.id, user.session_version, { rememberMe });
       res.status(201).json({ user: { email: user.email } });
     } catch (err) {
@@ -98,11 +108,14 @@ function createAuthRouter({ loginRateLimit = {}, google = null, stateStore = nul
 
   router.post('/login', async (req, res, next) => {
     try {
+      const email = normalizeEmail(req.body?.email);
+      const ip = clientIp(req);
+
       if (!limiter.check(req)) {
+        recordAuthEvent({ event: 'auth_login_rate_limited', email, ip, route: 'POST /auth/login' });
         return errorResponse(res, 429, 'rate_limited', 'too many login attempts, try again later');
       }
 
-      const email = normalizeEmail(req.body?.email);
       const password = String(req.body?.password || '');
       const rememberMe = req.body?.remember === true;
       const user = await repo.findUserByEmail(email);
@@ -117,9 +130,11 @@ function createAuthRouter({ loginRateLimit = {}, google = null, stateStore = nul
       );
 
       if (!user || !passwordOk) {
+        recordAuthEvent({ event: 'auth_login_invalid', email, ip, code: 'invalid_credentials', route: 'POST /auth/login' });
         return errorResponse(res, 401, 'invalid_credentials', 'invalid email or password');
       }
 
+      recordAuthEvent({ event: 'auth_login_success', email, ip, route: 'POST /auth/login' });
       setSessionCookie(res, user.id, user.session_version, { rememberMe });
       res.json({ user: { email: user.email } });
     } catch (err) {
