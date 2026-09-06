@@ -592,18 +592,18 @@
   font-size: 0.8125rem;
 }
 
-/* ---- Auth page: TRADEYE brand login (login-page-design.zip v2, 2026-09-06) ---- */
-/* FLOATING-CARD composition (the app's pre-v0 layout, not the v0 split):
-   the DARK hero stage spans the full page — eye mark + wordmark + tagline
-   mid-left, emerald "market mountain" artwork rising from the bottom — and
-   the light LOGIN CARD floats ON TOP, center-right, with hero visible around
-   its top/bottom/right edges and a soft elevation shadow. The card's colors
-   live in --ac-* custom properties so a :hover flips the WHOLE card to an
-   inverted near-black-green scheme (same 250ms ease there and back); only
-   colors change — no layout/size shift, and all controls stay clickable. */
+/* ----.home_watchlist -- original zip colors: the login page's own
+   background is EXACTLY the zip's — login-shell #f8fcfc with the hero's
+   radial gradient (#fff -> #ecf8f7 -> #f8fcfc) and the same light wash. The
+   FLOATING-CARD composition stays (hero spans the full page, card floats
+   center-right with hero visible around its top/bottom/right edges and a
+   soft elevation shadow). The card's colors live in --ac-* custom properties
+   so a :hover flips the WHOLE card to an inverted near-black-green scheme
+   (same 250ms ease there and back); only colors change — no layout/size
+   shift, and all controls stay clickable. */
 
 .app--auth {
-  background: var(--night); /* dark fallback behind the hero */
+  background: var(--night); /* dark fallback only behind the auth-gate loader */
 }
 
 .login-shell {
@@ -612,26 +612,24 @@
   align-items: center;
   justify-content: flex-end;
   min-height: calc(100svh - var(--ticker-h, 39px));
-  background: var(--night);
+  background: #f8fcfc;
 }
 
-/* Full-bleed hero bed. Everything below is layered inside and clipped to it. */
+/* Full-bleed hero bed — the zip's exact light radial-gradient background. */
 .hero-stage {
   position: absolute;
   inset: 0;
   overflow: hidden;
   isolation: isolate; /* keep the hero's internal z-indexes below the card */
-  background:
-    radial-gradient(1200px 720px at 26% 30%, rgba(45, 212, 170, 0.12), transparent 58%),
-    radial-gradient(1000px 760px at 80% 94%, rgba(0, 150, 128, 0.28), transparent 62%),
-    linear-gradient(165deg, #0a1513 0%, #0c1210 55%, #101c18 100%);
+  background: radial-gradient(circle at 70% 65%, #fff 0 17%, #ecf8f7 48%, #f8fcfc 75%);
+  background-color: #f8fcfc;
 }
 
 .visual-wash {
   position: absolute;
   inset: 0;
   pointer-events: none;
-  background: linear-gradient(110deg, rgba(16, 211, 160, 0.08), transparent 45%, rgba(255, 255, 255, 0.04) 82%);
+  background: linear-gradient(110deg, rgba(224, 243, 242, 0.45), transparent 40%, rgba(255, 255, 255, 0.7) 80%);
 }
 
 .brand-lockup {
@@ -647,11 +645,11 @@
   transform: translateY(-50%);
 }
 
-/* The eye mark is bright-fill enough to read on the dark stage */
+/* The eye mark + wordmark use the zip's exact colors/filters */
 .brand-lockup .eye-mark {
-  width: clamp(170px, 17vw, 235px);
+  width: clamp(155px, 17vw, 225px);
   height: auto;
-  filter: brightness(1.08) saturate(1.35) contrast(1.05) drop-shadow(0 14px 26px rgba(0, 0, 0, 0.55));
+  filter: brightness(0.66) contrast(1.58) saturate(1.3) drop-shadow(7px 9px 4px rgba(0, 18, 22, 0.52));
   transform: translateZ(20px) rotate(-2deg);
 }
 
@@ -664,24 +662,24 @@
 }
 
 .brand-copy strong {
-  color: var(--night-text);
+  color: #07151b;
   font-family: 'Montserrat', var(--font-ui);
   font-size: clamp(22px, 2.65vw, 38px);
   text-align: center;
   font-weight: 500;
   letter-spacing: 0.2em;
   line-height: 0.9;
-  text-shadow: 0 2px 14px rgba(0, 0, 0, 0.55);
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 1), 0 2px 0 rgba(0, 0, 0, 0.22), 0 6px 13px rgba(0, 24, 30, 0.4), 0 -1px 3px rgba(255, 255, 255, 0.32);
   white-space: nowrap;
 }
 
 .brand-copy strong span {
-  color: var(--teal-bright);
-  text-shadow: 0 0 18px rgba(45, 212, 170, 0.5), 0 2px 14px rgba(0, 0, 0, 0.6);
+  color: #0b9f79;
+  text-shadow: 0 1px 0 rgba(239, 255, 250, 1), 0 2px 0 rgba(0, 55, 43, 0.48), 0 0 16px rgba(0, 196, 151, 0.58), 0 -1px 3px rgba(225, 255, 247, 0.42);
 }
 
 .brand-copy small {
-  color: var(--night-muted);
+  color: #71808e;
   font-family: 'Montserrat', var(--font-ui);
   font-size: clamp(9px, 0.82vw, 12px);
   font-weight: 500;
@@ -690,7 +688,7 @@
 }
 
 .brand-copy small span {
-  color: var(--teal-bright);
+  color: #11a982;
   font-weight: 600;
 }
 
@@ -725,11 +723,11 @@
   bottom: 3%;
   height: 20%;
   pointer-events: none;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.18), transparent 30%, rgba(0, 72, 70, 0.2));
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.22), transparent 30%, rgba(0, 72, 70, 0.16));
   transform: perspective(500px) rotateX(68deg);
   transform-origin: bottom;
   opacity: 0.65;
-  mix-blend-mode: screen;
+  mix-blend-mode: multiply;
 }
 
 /* Right: the floating login card. Only a positioning lane — the CARD is the
@@ -817,29 +815,15 @@
 }
 
 .form-kicker {
-  margin: 0 0 18px;
+  margin: 0 0 12px;
   color: var(--ac-faint);
   font-size: 10px;
   font-weight: 800;
   letter-spacing: 0.22em;
 }
 
-.auth-card h1 {
-  margin: 0;
-  color: var(--ac-text);
-  font-family: 'Montserrat', var(--font-ui);
-  font-size: clamp(39px, 4vw, 55px);
-  font-weight: 500;
-  line-height: 0.98;
-  letter-spacing: -0.06em;
-}
-
-.auth-card h1 span {
-  color: var(--ac-accent);
-}
-
 .form-intro {
-  margin: 14px 0 32px;
+  margin: 14px 0 28px;
   color: var(--ac-muted);
   font-size: 14px;
   line-height: 1.55;
@@ -1060,26 +1044,6 @@
   text-underline-offset: 2px;
 }
 
-.legal {
-  margin: 42px 0 0;
-  color: var(--ac-faint);
-  font-size: 10px;
-  line-height: 1.6;
-  text-align: center;
-}
-
-/* Short desktop viewports: stop the card from clipping in the centered flex
-   lane — top-align it and tighten padding instead. */
-@media (max-height: 780px) {
-  .login-shell {
-    align-items: flex-start;
-    padding-top: 2.5rem;
-  }
-  .legal {
-    margin-top: 44px;
-  }
-}
-
 @media (max-width: 960px) {
   .login-shell {
     justify-content: center;
@@ -1103,9 +1067,6 @@
   .brand-lockup {
     top: 32%;
   }
-  .legal {
-    margin-top: 48px;
-  }
 }
 
 @media (max-width: 520px) {
@@ -1118,7 +1079,7 @@
     gap: 12px;
   }
   .brand-lockup .eye-mark {
-    width: 96px;
+    width: 94px;
   }
   .brand-copy {
     gap: 5px;
@@ -1138,9 +1099,6 @@
   }
   .auth-card {
     padding: 28px 24px;
-  }
-  .auth-card h1 {
-    font-size: 40px;
   }
   .form-intro {
     margin: 16px 0 28px;

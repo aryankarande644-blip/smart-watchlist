@@ -198,7 +198,6 @@ export function AuthPage({ onAuthenticated }) {
       <section className="auth-panel" aria-label="Sign in or create an account">
         <div className="auth-card">
           <p className="form-kicker">{isLogin ? 'SECURE ACCESS' : 'JOIN TRADEYE'}</p>
-          <h1>{isLogin ? 'Welcome back' : 'Create your account'}</h1>
           <p className="form-intro">
             {isLogin
               ? 'Sign in to see the market with a clearer view.'
@@ -282,10 +281,6 @@ export function AuthPage({ onAuthenticated }) {
             <button type="button" className="auth__link" onClick={toggle}>
               {isLogin ? 'Sign up' : 'Sign in'}
             </button>
-          </p>
-
-          <p className="legal">
-            Market data for demo purposes only and may be delayed — not for financial decisions.
           </p>
         </div>
       </section>
