@@ -707,6 +707,8 @@ frontend/
                                     --    90-day vs browser-close, forgot-password placeholder, Google button,
                                     --    ?auth_error= handling cleared from the URL)
     ErrorBoundary.jsx                  -- React error boundary
+    assets/                            -- photographed hero backgrounds, exported at 2x: tradeye-hero-desktop-{1x,2x}.png,
+                                    --    tradeye-hero-mobile-{1x,2x}.png (1x = LANCZOS downscale of the 2x)
     index.css, App.css                  -- light design tokens + dark-teal auth/logo/ticker styles, Section 7/9#
 ```
 
@@ -1031,6 +1033,18 @@ Real OAuth 2.0, not a fake button — full server-side redirect flow (§6):
   geometry-sample checks (no browser available in this env — a manual
   browser pass over login/signup tabs and a narrow viewport is the last
   visual check).
+- **Hero background photo (2026-09-06):** the full-width dark backdrop is now
+  a photographed hero image (`src/assets/`, exported by the owner at 2x). It
+  scales gracefully at ANY desktop resolution — `background-size: cover`
+  + `background-position: center` fills the stage proportionally on 4K,
+  1366×768 laptops, and non-maximized windows with zero stretching/gaps. On
+  high-DPI screens a `@media (min-resolution: 2dppx)` query swaps in the 2x
+  export (1758×895 / mobile 941×1672) for sharpness; normal-DPI screens get
+  a LANCZOS-halved 1x twin (879×447 / 470×836) to save bandwidth. The ≤960px
+  rule swaps to the portrait mobile export (`center top`). The image sits
+  under dark scrims (`.auth-stage::before`: left-tinted + top/bottom
+  gradients + two teal radial accents) so the left brand copy and card edges
+  stay legible; the white card is completely opaque on top of it.
 - **Forgot password = label only (title="Coming soon")**, NOT clickable —
   no email provider yet. This is the marked wiring point (+ email
   verification) when email infra lands; do NOT wire a fake reset.

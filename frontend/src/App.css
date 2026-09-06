@@ -578,16 +578,17 @@
 }
 
 /* ---- Auth page: dark stage + floating card (2026-09-06) ---- */
-/* The dark backdrop (eye logo, wordmark, value props, closing line) is now
-   the FULL-WIDTH page, not a left half. The light form card floats on it,
-   positioned center-right, with dark stage showing all the way around its
-   top, bottom and right edges — no vertical seam. The dark ticker stays at
-   the very top, above everything. */
+/* The hero IMAGE fills the full-width page behind everything, always
+   proportionally: background-size:cover scales it to whatever the viewport
+   is (4K, 1366x768, a non-maximized window) with no stretch and no gaps.
+   Retina screens get the 2x export via a min-resolution media query; the 1x
+   pair is served to normal-DPI screens to save bandwidth. The image is
+   layered UNDER dark scrims (::before) that keep the left brand copy and the
+   card edges readable, while the light form card floats center-right on top
+   — dark stage remains visible around its top/bottom/right edges. The dark
+   ticker stays at the very top, above everything. */
 .app--auth {
-  background:
-    radial-gradient(900px 520px at 12% -10%, rgba(45, 212, 170, 0.16), transparent 62%),
-    radial-gradient(760px 520px at 95% 115%, rgba(15, 138, 110, 0.16), transparent 60%),
-    linear-gradient(180deg, var(--night) 0%, #0a0f0d 100%);
+  background: var(--night); /* fallback while/as the hero image loads */
 }
 
 .auth-stage {
@@ -599,6 +600,34 @@
   padding: clamp(2.5rem, 6vh, 5rem) clamp(1.5rem, 5vw, 4.5rem) clamp(3rem, 8vh, 6rem);
   color: var(--night-text);
   min-height: calc(100vh - var(--ticker-h, 39px));
+
+  /* base: desktop composition at 1x */
+  background-color: var(--night);
+  background-image: url('./assets/tradeye-hero-desktop-1x.png');
+  background-size: cover;
+  background-position: center center;
+  background-repeat: no-repeat;
+}
+
+/* retina / 2x export — stays sharp on Retina-style laptop screens */
+@media (min-resolution: 2dppx), (-webkit-min-device-pixel-ratio: 2) {
+  .auth-stage {
+    background-image: url('./assets/tradeye-hero-desktop-2x.png');
+  }
+}
+
+/* dark scrims over the image so the left copy and card edges stay legible;
+   the two radial accents keep the brand's teal ambience through the photo */
+.auth-stage::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(900px 520px at 12% -10%, rgba(45, 212, 170, 0.18), transparent 62%),
+    radial-gradient(760px 520px at 95% 115%, rgba(15, 138, 110, 0.18), transparent 60%),
+    linear-gradient(90deg, rgba(6, 12, 10, 0.92) 0%, rgba(6, 12, 10, 0.68) 40%, rgba(8, 14, 12, 0.42) 100%),
+    linear-gradient(180deg, rgba(5, 10, 8, 0.38) 0%, rgba(6, 12, 10, 0.6) 100%);
 }
 
 /* faint vertical grid overlay across the whole dark stage */
@@ -607,6 +636,7 @@
   position: absolute;
   inset: 0;
   pointer-events: none;
+  z-index: 1;
   background: repeating-linear-gradient(
     90deg,
     transparent 0,
@@ -701,6 +731,9 @@
     gap: 2.75rem;
     padding: 2.25rem 1.5rem 3rem;
     min-height: calc(100vh - var(--ticker-h, 39px));
+
+    background-image: url('./assets/tradeye-hero-mobile-1x.png');
+    background-position: center top;
   }
 
   .auth-hero {
@@ -716,6 +749,14 @@
   .auth-card {
     max-width: 440px;
     margin: 0 auto;
+  }
+}
+
+/* mobile + retina: the portrait export stays sharp on high-DPI phones.
+   Ordered AFTER both density/width rules so this wins the cascade. */
+@media (max-width: 960px) and (min-resolution: 2dppx), (max-width: 960px) and (-webkit-min-device-pixel-ratio: 2) {
+  .auth-stage {
+    background-image: url('./assets/tradeye-hero-mobile-2x.png');
   }
 }
 
