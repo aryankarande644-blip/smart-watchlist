@@ -21,7 +21,7 @@ function formatTickerPrice(price) {
   return `₹${price.toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;
 }
 
-export function TickerStrip() {
+export function TickerStrip({ variant = 'light' }) {
   const [indices, setIndices] = useState(null);
   const timer = useRef(null);
 
@@ -62,7 +62,7 @@ export function TickerStrip() {
   }, []);
 
   return (
-    <nav className="ticker" aria-label="Market indices">
+    <nav className={`ticker${variant === 'dark' ? ' ticker--dark' : ''}`} aria-label="Market indices">
       <div className="ticker__inner">
         {!indices && <span className="ticker__empty">Loading indices…</span>}
         {(indices && indices.length > 0 ? indices : DEFAULT_INDICES).map((idx) => (

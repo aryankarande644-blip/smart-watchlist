@@ -39,9 +39,15 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ snapshotToken }),
     }),
-  signup: (email, password) =>
-    request('/auth/signup', { method: 'POST', body: JSON.stringify({ email, password }) }),
-  login: (email, password) =>
-    request('/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) }),
+  signup: (email, password, remember) =>
+    request('/auth/signup', { method: 'POST', body: JSON.stringify({ email, password, remember }) }),
+  login: (email, password, remember) =>
+    request('/auth/login', { method: 'POST', body: JSON.stringify({ email, password, remember }) }),
   logout: () => request('/auth/logout', { method: 'POST' }),
+  // Google sign-in is a full-page redirect, not an XHR: the browser goes to
+  // the backend, bounces to Google consent, and lands back on the callback,
+  // which sets the session cookie and redirects into the app.
+  get googleAuthUrl() {
+    return `${BASE}/auth/google`;
+  },
 };

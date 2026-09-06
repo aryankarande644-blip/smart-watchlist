@@ -6,6 +6,7 @@ import { AddSymbolForm } from './AddSymbolForm';
 import { AuthPage } from './AuthPage';
 import { TickerStrip } from './TickerStrip';
 import { MarketRadar } from './MarketRadar';
+import { Logo } from './Logo';
 
 // Configurable via VITE_POLL_INTERVAL_MS (ms); default 20s. Env-driven so
 // the interval can be tuned without a code change.
@@ -154,8 +155,8 @@ export function App() {
 
   if (authed === false) {
     return (
-      <div className="app">
-        <TickerStrip />
+      <div className="app app--auth">
+        <TickerStrip variant="dark" />
         <AuthPage onAuthenticated={handleAuthenticated} />
       </div>
     );
@@ -168,7 +169,9 @@ export function App() {
       <TickerStrip />
       <div className="shell">
         <nav className="side-nav" aria-label="Primary">
-          <div className="side-nav__brand">TRADEYE</div>
+          <div className="side-nav__brand">
+            <Logo tone="light" compact />
+          </div>
           <ul className="side-nav__list">
             <li>
               <button

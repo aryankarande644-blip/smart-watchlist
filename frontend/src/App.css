@@ -157,6 +157,32 @@
   font-style: italic;
 }
 
+/* Dark ticker (sits over the near-black auth hero, not white app chrome) */
+.ticker--dark {
+  background: var(--night);
+  border-bottom: 1px solid var(--night-line);
+}
+
+.ticker--dark .ticker__item + .ticker__item {
+  border-left: 1px solid var(--night-line);
+}
+
+.ticker--dark .ticker__label {
+  color: var(--night-muted);
+}
+
+.ticker--dark .ticker__price {
+  color: var(--night-text);
+}
+
+.ticker--dark .ticker__meta {
+  color: var(--night-muted);
+}
+
+.ticker--dark .ticker__empty {
+  color: var(--night-muted);
+}
+
 /* ---- Masthead ---- */
 .masthead {
   margin-bottom: 2rem;
@@ -551,35 +577,133 @@
   font-size: 0.8125rem;
 }
 
-/* ---- Auth page ---- */
-.auth {
-  max-width: 400px;
-  margin: 0 auto;
-  padding: 3rem 1.5rem;
+/* ---- Auth page: dark-teal two-panel (2026-09-06) ---- */
+/* The whole unauthenticated shell goes dark; the right panel is the only
+   light card. The ticker strip sits dark on top, spanning full width. */
+.app--auth {
+  background: var(--night);
 }
 
-.auth__card {
-  border: 1px solid var(--hairline);
-  border-radius: 6px;
-  padding: 1.5rem 1.5rem 1.25rem;
+.auth-split {
+  flex: 1;
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
+  min-height: calc(100vh - var(--ticker-h, 39px));
+}
+
+/* Left hero: deep charcoal, subtle teal glow, brand lockup + props + close */
+.auth-hero {
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 2.5rem;
+  padding: clamp(2rem, 5vw, 4rem);
+  color: var(--night-text);
+  background:
+    radial-gradient(900px 520px at 12% -10%, rgba(45, 212, 170, 0.16), transparent 62%),
+    radial-gradient(700px 480px at 90% 110%, rgba(15, 138, 110, 0.14), transparent 60%),
+    linear-gradient(180deg, var(--night) 0%, #0a0f0d 100%);
+}
+
+.auth-hero::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: repeating-linear-gradient(
+    90deg,
+    transparent 0,
+    transparent 95px,
+    rgba(255, 255, 255, 0.025) 95px,
+    rgba(255, 255, 255, 0.025) 96px
+  );
+}
+
+.auth-hero > * {
+  position: relative;
+  z-index: 1;
+}
+
+.auth-hero__props {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.auth-hero__props li {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.auth-hero__props strong {
+  color: var(--teal-bright);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.auth-hero__props span {
+  color: var(--night-muted);
+  font-size: 0.9375rem;
+  line-height: 1.55;
+  max-width: 38ch;
+}
+
+.auth-hero__closing {
+  margin: 0;
+  font-family: var(--font-display);
+  font-weight: 500;
+  font-size: clamp(1.4rem, 2.6vw, 2rem);
+  color: var(--teal-bright);
+  letter-spacing: -0.01em;
+}
+
+/* Right panel: the actual form card on white */
+.auth-panel {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: clamp(2rem, 4vw, 3.5rem) 2rem;
   background: var(--paper);
 }
 
-.auth__title {
+.auth-card {
+  width: 100%;
+  max-width: 400px;
+}
+
+.auth-card__eyebrow {
+  margin: 0 0 0.4rem;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--teal);
+}
+
+.auth-card__title {
   font-family: var(--font-display);
   font-weight: 500;
-  font-size: 1.5rem;
-  margin: 0 0 1.25rem;
+  font-size: 2rem;
+  margin: 0 0 1.5rem;
   letter-spacing: -0.01em;
+  color: var(--ink);
 }
 
 .auth__tabs {
   display: flex;
   gap: 0.25rem;
   border: 1px solid var(--hairline);
-  border-radius: 4px;
+  border-radius: 8px;
   padding: 0.25rem;
-  margin-bottom: 1.25rem;
+  margin-bottom: 1.4rem;
   background: var(--surface);
 }
 
@@ -589,8 +713,9 @@
   border: none;
   color: var(--muted);
   font-size: 0.875rem;
-  padding: 0.45rem;
-  border-radius: 3px;
+  font-weight: 500;
+  padding: 0.5rem;
+  border-radius: 6px;
   cursor: pointer;
   font-family: inherit;
 }
@@ -599,12 +724,13 @@
   background: var(--paper);
   color: var(--ink);
   border: 1px solid var(--hairline);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
 }
 
 .auth__form {
   display: flex;
   flex-direction: column;
-  gap: 1rem;
+  gap: 1.05rem;
 }
 
 .auth__field {
@@ -620,17 +746,84 @@
 }
 
 .auth__field input {
-  background: var(--surface);
+  background: var(--paper);
   border: 1px solid var(--hairline);
   color: var(--ink);
   padding: 0.65rem 0.85rem;
-  border-radius: 4px;
+  border-radius: 8px;
   font-size: 0.9375rem;
   font-family: inherit;
+  transition: border-color 0.12s ease;
 }
 
 .auth__field input::placeholder {
   color: var(--muted);
+}
+
+.auth__field input:focus {
+  outline: none;
+  border-color: var(--teal);
+  box-shadow: 0 0 0 3px rgba(15, 138, 110, 0.12);
+}
+
+/* Password field + its Show/Hide toggle in one unit */
+.auth__password {
+  position: relative;
+}
+
+.auth__password input {
+  width: 100%;
+  padding-right: 3.5rem;
+}
+
+.auth__toggle {
+  position: absolute;
+  top: 50%;
+  right: 0.6rem;
+  transform: translateY(-50%);
+  background: transparent;
+  border: none;
+  color: var(--teal);
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+  padding: 0.25rem 0.35rem;
+}
+
+.auth__toggle:hover {
+  color: var(--teal-deep);
+}
+
+.auth__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  font-size: 0.8125rem;
+}
+
+.auth__check {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--muted);
+  cursor: pointer;
+  user-select: none;
+}
+
+.auth__check input {
+  accent-color: var(--teal);
+  width: 15px;
+  height: 15px;
+  cursor: pointer;
+}
+
+/* Forgot password is a PLACEHOLDER pending email-provider setup (HANDOFF §10).
+   Deliberately not an <a> / not clickable — "coming soon", not a dead link. */
+.auth__forgot {
+  color: var(--teal);
+  font-weight: 500;
 }
 
 .auth__error {
@@ -640,25 +833,84 @@
 }
 
 .auth__submit {
-  background: var(--ink);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  background: var(--night);
   color: var(--paper);
   border: none;
-  padding: 0.7rem 1.2rem;
-  border-radius: 4px;
+  padding: 0.75rem 1.2rem;
+  border-radius: 8px;
   font-weight: 600;
   font-size: 0.9375rem;
   cursor: pointer;
   margin-top: 0.25rem;
   font-family: inherit;
+  transition: background 0.12s ease;
+}
+
+.auth__submit:hover:not(:disabled) {
+  background: var(--teal-deep);
 }
 
 .auth__submit:disabled {
-  opacity: 0.4;
+  opacity: 0.5;
   cursor: default;
 }
 
+.auth__arrow {
+  transition: transform 0.12s ease;
+}
+
+.auth__submit:hover:not(:disabled) .auth__arrow {
+  transform: translateX(2px);
+}
+
+.auth__divider {
+  display: flex;
+  align-items: center;
+  gap: 0.9rem;
+  margin: 1.5rem 0 1.25rem;
+  color: var(--muted);
+  font-size: 0.625rem;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+}
+
+.auth__divider::before,
+.auth__divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--hairline);
+}
+
+.auth__google {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.65rem;
+  width: 100%;
+  background: var(--paper);
+  border: 1px solid var(--hairline);
+  border-radius: 8px;
+  padding: 0.7rem 1.2rem;
+  color: var(--ink);
+  font-size: 0.9375rem;
+  font-weight: 500;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background 0.12s ease, border-color 0.12s ease;
+}
+
+.auth__google:hover {
+  background: var(--surface);
+  border-color: #d1d5db;
+}
+
 .auth__switch {
-  margin: 1.25rem 0 0;
+  margin: 1.5rem 0 0;
   text-align: center;
   font-size: 0.875rem;
   color: var(--muted);
@@ -668,11 +920,102 @@
   background: none;
   border: none;
   padding: 0;
-  color: var(--accent);
+  color: var(--teal);
   cursor: pointer;
   font-size: inherit;
   font-family: inherit;
+  font-weight: 600;
   text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+/* ---- Logo / brand lockup ---- */
+.logo {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.8rem;
+  --logo-outline: var(--ink);
+  --logo-candle: var(--teal);
+  --logo-trend: rgba(15, 138, 110, 0.45);
+  --logo-iris: rgba(15, 138, 110, 0.1);
+  --logo-word: var(--ink);
+  --logo-eyespot: var(--teal);
+  --logo-tag: var(--muted);
+}
+
+.logo--dark {
+  --logo-outline: rgba(231, 241, 236, 0.92);
+  --logo-candle: var(--teal-bright);
+  --logo-trend: rgba(45, 212, 170, 0.5);
+  --logo-iris: rgba(45, 212, 170, 0.1);
+  --logo-word: var(--night-text);
+  --logo-eyespot: var(--teal-bright);
+  --logo-tag: var(--night-muted);
+}
+
+.eye-mark__almond {
+  stroke: var(--logo-outline);
+}
+
+.eye-mark__iris {
+  fill: var(--logo-iris);
+}
+
+.eye-mark__wick {
+  stroke: var(--logo-candle);
+}
+
+.eye-mark__body {
+  fill: var(--logo-candle);
+}
+
+.eye-mark__trend {
+  stroke: var(--logo-trend);
+}
+
+.logo__text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.logo__word {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 1.7rem;
+  letter-spacing: 0.03em;
+  line-height: 1;
+  color: var(--logo-word);
+  white-space: nowrap;
+}
+
+.logo__eye {
+  color: var(--logo-eyespot);
+}
+
+.logo__tag {
+  margin: 0;
+  font-size: 0.8125rem;
+  color: var(--logo-tag);
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+.logo--compact .logo__word {
+  font-size: 1.28rem;
+}
+
+.logo--compact .logo__tag {
+  font-size: 0.72rem;
+}
+
+/* Sidebar brand uses the compact light lockup */
+.side-nav__brand {
+  padding: 0 0.5rem 1.75rem;
+}
+
+.side-nav__brand .logo {
+  gap: 0.6rem;
 }
 
 /* ---- Market Radar (full page) ---- */

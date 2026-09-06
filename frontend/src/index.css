@@ -10,6 +10,16 @@
   --surface: #f9fafb;
   --ink-raised: #1a1a1a;
 
+  /* Dark-teal brand identity (auth pass 2026-09-06) */
+  --teal: #0f8a6e;          /* deep emerald-teal — brand primary on light */
+  --teal-bright: #2dd4aa;   /* brighter teal — reads on dark backgrounds */
+  --teal-deep: #0a5643;     /* pressed / hover on light */
+  --night: #0c1210;         /* near-black charcoal with a cool green cast */
+  --night-raise: #111a17;   /* elevated surface on night */
+  --night-line: rgba(255, 255, 255, 0.08);
+  --night-text: #e7f1ec;
+  --night-muted: rgba(231, 241, 236, 0.55);
+
   --font-display: 'Fraunces', Georgia, serif;
   --font-ui: 'Inter', -apple-system, sans-serif;
 

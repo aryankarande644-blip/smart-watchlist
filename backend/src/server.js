@@ -5,6 +5,7 @@ const cors = require('cors');
 
 const { sessionMiddleware } = require('./routes/session');
 const { createAuthRouter } = require('./routes/auth');
+const { createGoogleOAuth } = require('./auth/googleOAuth');
 const createWatchlistRouter = require('./routes/watchlist');
 const { createRadarRouter } = require('./routes/radar');
 const { createHealthRouter } = require('./routes/health');
@@ -19,6 +20,20 @@ const PORT = process.env.PORT || 3001;
 const FRONTEND_ORIGIN = process.env.FRONTEND_ORIGIN || 'http://localhost:5173';
 const POLL_INTERVAL_MS = Number(process.env.POLL_INTERVAL_MS) || 30000;
 const BASELINE_REFRESH_TIME_IST = process.env.BASELINE_REFRESH_TIME_IST || '18:30';
+
+// Google OAuth client built from env — null (=> the /auth/google routes answer
+// with a clear "not configured" redirect) until GOOGLE_CLIENT_ID and
+// GOOGLE_CLIENT_SECRET are set on the host. GOOGLE_REDIRECT_URI must be the
+// EXACT URI registered in Google Cloud Console for the deployed environment:
+//   https://watchlist-backend-mt3i.onrender.com/auth/google/callback  (prod)
+//   http://localhost:3001/auth/google/callback                        (dev)
+function createGoogleOAuthFromEnv() {
+  const clientId = process.env.GOOGLE_CLIENT_ID;
+  const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
+  if (!clientId || !clientSecret) return null;
+  const redirectUri = process.env.GOOGLE_REDIRECT_URI || 'http://localhost:3001/auth/google/callback';
+  return createGoogleOAuth({ clientId, clientSecret, redirectUri });
+}
 
 // CSRF defense-in-depth: sameSite:strict already stops the session cookie
 // from riding along on cross-site requests, but a mismatched Origin on a
@@ -50,7 +65,13 @@ function createApp({ marketDataClient, poller, authOptions = {} }) {
   app.use(createIndicesRouter()); // public, like /health — ticker strip
   app.use(sessionMiddleware);
 
-  app.use('/auth', createAuthRouter(authOptions));
+  app.use('/auth', createAuthRouter({
+    loginRateLimit: authOptions.loginRateLimit,
+    // Injectable for tests; production builds the client from env vars below.
+    google: authOptions.google || createGoogleOAuthFromEnv(),
+    stateStore: authOptions.stateStore,
+    appOrigin: authOptions.appOrigin || FRONTEND_ORIGIN,
+  }));
   app.use(createWatchlistRouter({ marketDataClient }));
   app.use(createRadarRouter());
 

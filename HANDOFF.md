@@ -122,9 +122,16 @@ amplification)
 
 ```sql
 -- users: real accounts (email + bcrypt password hash + session_version);
--- anonymous-session model superseded by migration 002 (see Section 6)
+-- anonymous-session model superseded by migration 002 (see Section 6).
+-- auth_provider / nullable password_hash added by migration 004 (see §6).
 CREATE TABLE users (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  email TEXT UNIQUE NOT NULL,
+  password_hash TEXT,               -- NULLABLE as of migration 004: Google-
+                                    -- authenticated accounts have no password
+  auth_provider TEXT NOT NULL DEFAULT 'email'
+    CHECK (auth_provider IN ('email', 'google')),  -- how the account was made
+  session_version INTEGER NOT NULL DEFAULT 0,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
@@ -207,6 +214,26 @@ All state-changing endpoints require the session cookie (see Section 7).
 All responses use a uniform error envelope: `{ error: { code, message } }`.
 
 ```
+POST /auth/signup   body: { email, password, remember? }   -- PUBLIC
+  -> 201 { user: { email } }  + session cookie (short by default; `remember:true`
+         => 90-day cookie, maximized off the same policy as login)
+  -> 400 invalid_email | password_too_short
+  -> 409 email_taken
+POST /auth/login    body: { email, password, remember? }   -- PUBLIC, rate-limited
+  -> 200 { user: { email } } + session cookie (`remember:true` => 90-day)
+  -> 401 invalid_credentials  -- identical for wrong password, unknown email,
+         AND Google-only accounts (NULL password_hash): byte-identical body via
+         a DUMMY_HASH bcrypt compare, no provider/timing enumeration
+POST /auth/logout   -- revokes session_version + clears the cookie, 204
+GET /auth/google    -- PUBLIC, no session required. 302 to Google's authorize
+         endpoint with a consume-once `state` nonce (10-min TTL). 302 with
+         ?auth_error=provider_not_configured when env not set.
+GET /auth/google/callback -- PUBLIC. 302 back to FRONTEND_ORIGIN with a short
+         browser-close session cookie; owner-decided auto-link for existing
+         email/password accounts (same row, no duplicate). Failures redirect
+         with ?auth_error=<one of google_denied | google_state_mismatch |
+         google_callback_error | google_email_unverified>.
+
 GET /watchlist
   -> 200 { items: [
       {
@@ -321,11 +348,65 @@ boundary, not a hidden bug). That model is now replaced by real accounts:
   `POST /auth/logout` (revokes + clears). Login is rate-limited per IP
   (10 per 15 min sliding window).
 - **Why:** persistent watchlists across devices was a hard product gap of
-  the cookie-only model. **Explicitly deferred future scope, not forgotten:**
-  OAuth (Google/GitHub) and email verification — no email infrastructure
-  exists at hackathon scope, and OAuth needs a separate provider/app setup;
-  both are clean future additions since passwords already live in-bcrypt
-  and the session layer is account-based, not cookie-based.
+  the cookie-only model. **Still explicitly deferred, not forgotten:** email
+  verification and GitHub/other OAuth. Google OAuth itself is now DONE
+  (migration 004 + §10 #9); email verification still needs email
+  infrastructure that doesn't exist at hackathon scope. The session layer is
+  account-based, not cookie-based, so all of these stay clean future adds.
+
+### Google OAuth: real OAuth 2.0 ("Continue with Google"), not a fake button
+Owner decision 2026-09-06. Full redirect flow through the backend, no API
+key leaked to the browser (the `client_secret` only ever leaves the server
+in the token exchange):
+
+- **`GET /auth/google`** (no session required) → `302` to Google's
+  authorize endpoint with `client_id`, the registered `redirect_uri`,
+  `scope=openid email`, and a random **`state` nonce** stored server-side
+  (consume-once, 10-min TTL — defeats OAuth login CSRF / replay).
+- **`GET /auth/google/callback`** → consumes the `state` → exchanges
+  `code` for an ID token/google userinfo → **requires `email_verified ===
+  true`** (owner correctness refinement: an unverified Google email is
+  bounced with `?auth_error=google_email_unverified` and creates nothing) →
+  resolves the account → issues a **short, browser-close session cookie**
+  (Google sessions deliberately do NOT honor remember-me) → `302` back to
+  `FRONTEND_ORIGIN`. Failures redirect with `?auth_error=<code>`
+  (`provider_not_configured`, `google_denied`, `google_state_mismatch`,
+  `google_callback_error`, `google_email_unverified`).
+- **Account resolution (`resolveGoogleUser`)** — owner decision: an email
+  that already exists auto-links **silently**:
+  - email unknown → create row with `auth_provider='google'`,
+    `password_hash=NULL`;
+  - email exists with `auth_provider='email'` → reuse the SAME row
+    (auto-link); `auth_provider` stays `'email'`, the password stays valid,
+    no duplicate — the user just got a faster way in;
+  - a Google-owned email signing up/into `/auth/*` password endpoints can
+    never be claimed — login with a NULL-hash email returns the byte-identical
+    `401 invalid_credentials` as an unknown email (no provider enumeration),
+    and email signup collides with `409 email_taken`.
+- Login with a Google-only account is deliberately **indistinguishable**
+  from a wrong password: the route runs a `DUMMY_HASH` bcrypt compare so
+  timing and response body reveal nothing (this extends the anti-enumeration
+  contract from the email/password path).
+- **Config:** `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`,
+  `GOOGLE_REDIRECT_URI` env vars; unset → `/auth/google` answers
+  `provider_not_configured` instead of crashing. Registered URIs:
+  - prod `https://watchlist-backend-mt3i.onrender.com/auth/google/callback`
+  - dev `http://localhost:3001/auth/google/callback`
+
+### Remember me = the session cookie's real expiry, not a fake checkbox
+Owner decision 2026-09-06, unifying the UI and the wire:
+- `remember: true` (login *or* signup) → cookie issued with
+  `Max-Age=7776000` (90 days) + `Expires`.
+- `remember: false` or omitted → **browser-close session cookie** (no
+  `Max-Age`/`Expires`), and Google sessions always get this short form.
+- Backed by `REMEMBER_ME_MAX_AGE_MS = 1000*60*60*24*90` in
+  `routes/session.js` and exercised in `e2e.test.js` (rm1–rm4) against the
+  real Set-Cookie header. Security posture unchanged: `HttpOnly; SameSite=Strict`
+  (SameSite=None only on cross-origin Render—Neon/Vercel deployment), and
+  logout still bumps `session_version` so remember-me can't survive logout.
+- **`Forgot password?` is a label only** (title="Coming soon"), deliberately
+  not a clickable link — there's no email provider yet. Do NOT wire a fake
+  reset; it is the marked wiring point for when email infra lands.
 
 ### Three distinct "no fresh data" states, not one
 Real testing forced this distinction (see Section 8, bug #6):
@@ -469,9 +550,9 @@ as primary defense, plus `/health` honestly reporting
 | `market_closed` row | Trading hours ended | Badge, price still shown |
 | Meaningful change | `diff.isMeaningful === true` | Gold left-border highlight, "Mark seen" button appears |
 
-Design tokens (light "TRADEYE" theme — the app went "Pulse" → "Uptick" in the
-final navigation pass 2026-09-05 and was renamed to **TRADEYE** (quote: **"An
-extra eye on the market."**) on 2026-09-05; the earlier dark ledger theme
+Design tokens (light "TRADEYE" theme — the app was renamed to **TRADEYE**
+(quote: **"An extra eye on the market."**) in the final navigation pass
+2026-09-05; the earlier dark ledger theme
 was replaced by a white background, near-black text, hairline borders, colored
 badges, and a persistent top ticker strip):
 - Background `#FFFFFF`, primary text `#1A1A1A`, secondary text `#6B7280`
@@ -542,15 +623,24 @@ backend/
   migrations/001_init.sql      -- full schema, Section 4 above
   migrations/002_add_auth.sql  -- auth columns + clean cutover (Section 6)
   migrations/003_indices_and_sparkline.sql -- sparkline_closes + index_quote
+  migrations/004_google_oauth.sql -- auth_provider + nullable password_hash (Google OAuth)
   scripts/reset-dev-db.sql     -- local dev clean-slate
-  src/
-    diffEngine.js               -- Section 3, PURE function, 17 tests
-    server.js                   -- Express app wiring, graceful shutdown, provider selection,
-                                --    configurable poll interval, CSRF origin check, baseline refresher
-    db/
-      pool.js                   -- pg Pool, env-configured DATABASE_URL
-      repository.js             -- every query, race locks, idempotency, refresh-symbols helper,
-                                --    index_quote cache, sparkline column
+src/
+      diffEngine.js               -- Section 3, PURE function, 17 tests
+      server.js                   -- Express app wiring, graceful shutdown, provider selection,
+                                --    configurable poll interval, CSRF origin check, baseline refresher,
+                                --    Google OAuth client built from env (null => provider_not_configured)
+      auth/
+        passwords.js              -- bcrypt hash/verify (cost 10, DUMMY_HASH for anti-enumeration)
+        rateLimit.js              -- per-IP sliding-window login limiter
+        googleOAuth.js            -- OAuth 2.0 client: authorize-URL build, code->token exchange,
+                                --    userinfo fetch (injectable fetch for tests; client_secret never
+                                --    leaves the server)
+        oauthState.js             -- consume-once `state` nonce store (10-min TTL), defeats login CSRF
+      db/
+        pool.js                   -- pg Pool, env-configured DATABASE_URL
+        repository.js             -- every query, race locks, idempotency, refresh-symbols helper,
+                                --    index_quote cache, sparkline column, auth_provider-aware create/find
     baseline/
       computeBaseline.js        -- historical candles -> volatility/avgVolume -> status + sparkline_closes
       refreshBaselines.js       -- daily off-market recompute job (Section 10 #4), 11 tests
@@ -567,8 +657,10 @@ backend/
       badge.js                  -- pure diff-field -> badge label + one-line "why" (Volume Spike / Strong
                                 --    Move / High Volatility / High Activity / Near Breakout)
     routes/
-      session.js                 -- session cookie resolve-only middleware (+ sign/verify/issue/clear; versioned payload)
-      auth.js                    -- signup / login / logout, login rate-limited per IP
+      session.js                 -- session cookie resolve-only middleware (+ sign/verify/issue/clear; versioned
+                                --    payload; REMEMBER_ME_MAX_AGE_MS = 90 days for `remember` cookies)
+      auth.js                    -- signup / login / logout (rate-limited, remember-me) + GET /auth/google +
+                                --    callback (state consume, email_verified gate, silent auto-link, short cookie)
       watchlist.js                -- GET/POST/DELETE/ack, live symbol validation, 401-guarded
       indices.js                  -- public GET /indices for the top ticker strip
       radar.js                    -- GET /radar (401-guarded): top 5 movers, excludes user's watchlist
@@ -582,27 +674,38 @@ backend/
       poller.test.js                   -- 23 tests (incl. index polling + radar-universe merge/dedupe)
       refreshBaselines.test.js           -- 11 tests (real Postgres, deterministic schedule math)
       auth.test.js                        -- 13 tests
+      googleOAuth.test.js                  -- 23 tests (authorize-URL/token/userinfo exactness + state store)
+      oauth.e2e.test.js                     -- 22 tests (full redirect flow vs fake Google: create, no-dup,
+                                          --    state-replay rejection, unverified-gate, auto-link, Google-only
+                                          --    login indistinguishability, 409 on Google-owned email,
+                                          --    provider-not-configured degradation, google_denied cancel)
       radarBadge.test.js                    -- 13 tests (pure badge-mapping cases + boundaries)
       radar.e2e.test.js                     -- 8 tests (exclusion, top-5 sort, badge mapping, 401)
-      e2e.test.js                       -- 35 tests (real HTTP server + Postgres, incl. /indices + table fields)
+      e2e.test.js                       -- 39 tests (real HTTP server + Postgres, incl. /indices + table fields
+                                         --    + remember-me cookie contract rm1-rm4)
       run.js                             -- runs all suites in sequence
 
 frontend/
   package.json                  -- react, vite
   vite.config.js                 -- dev-only proxy to backend (incl. /indices)
   index.html                      -- Fraunces + Inter font loading
-  src/
+  Throwaway? no. — src/
     main.jsx                      -- entry, wraps App in ErrorBoundary
-    App.jsx                        -- nav state (activeView), sidebar nav, avatar, watchlist table
-    api.js                          -- thin fetch client matching Section 5 exactly
-    TickerStrip.jsx                 -- top sticky NIFTY/SENSEX strip (public /indices)
+    App.jsx                        -- nav state (activeView), sidebar nav + compact logo, avatar, watchlist table,
+                                --    dark `app--auth` shell (dark ticker + AuthPage) when unauthenticated
+    api.js                          -- thin fetch client matching Section 5 exactly (incl. remember + googleAuthUrl)
+    Logo.jsx                        -- hand-drawn SVG eye/candlestick TRADEYE lockup (dark + light tones)
+    TickerStrip.jsx                 -- top sticky NIFTY/SENSEX strip (public /indices; light + dark variant)
     WatchlistRow.jsx                 -- table row: Stock/Price/Change/Volume/Signal/Sparkline
     MarketRadar.jsx                  -- full-width Market Radar page: subtitle, last-updated (+ one-click add)
     Sparkline.jsx                    -- inline SVG "Last 7 Days" sparkline (shared by table + radar)
     AddSymbolForm.jsx                 -- debounced add, inline errors
-    AuthPage.jsx                       -- login/signup (light restyle)
+    AuthPage.jsx                       -- two-panel premium login/signup: dark hero (logo + value props + "Markets
+                                    --    move. You see more.") + light card (tabs, show/hide password, remember-me,
+                                    --    90-day vs browser-close, forgot-password placeholder, Google button,
+                                    --    ?auth_error= handling cleared from the URL)
     ErrorBoundary.jsx                  -- React error boundary
-    index.css, App.css                  -- light design tokens + table/strip styles, Section 7
+    index.css, App.css                  -- light design tokens + dark-teal auth/logo/ticker styles, Section 7/9#
 ```
 
 **Run everything locally:**
@@ -612,7 +715,7 @@ psql -f backend/migrations/001_init.sql
 
 cd backend
 npm install
-npm test                          # 172 tests across 9 suites, needs Postgres reachable
+npm test                          # 248 tests across 13 suites, needs Postgres reachable
 DATABASE_URL=... MARKET_DATA_PROVIDER=demo npm start   # runs on :3001
 
 cd ../frontend
@@ -877,9 +980,48 @@ deliberate resilience exercise — reuse, don't fork:
   1.3-and-1.0/1.5 boundaries + stale/no-badge guards; `radar.e2e.test.js`
   (8) covers watchlist exclusion, at-most-5 + sort-by-abs-score, badge
   mapping from a seeded deterministic universe, field shape, and 401;
-  `poller.test.js` gained the merge/dedupe test (both-lists symbol fetched
-  exactly once, indices counted separately). Full suite: **199 tests, 0
-  failures.** Frontend production build clean.
+`poller.test.js` gained the merge/dedupe test (both-lists symbol fetched
+   exactly once, indices counted separately). Full suite: **199 tests, 0
+   failures.** Frontend production build clean.
+
+### 9. Google OAuth login + dark-teal two-panel auth redesign — DONE (2026-09-06)
+Real OAuth 2.0, not a fake button — full server-side redirect flow (§6):
+- **Migration `004_google_oauth.sql`:** `users.auth_provider` (TEXT CHECK
+  `'email'|'google'`, default `'email'`) + `password_hash` now NULLABLE
+  (Google-only accounts have no password). Applied locally; **must be applied
+  to the Neon production DB** alongside the code deploy.
+- **Backend:** `auth/googleOAuth.js` (injectable-fetch client: authorize
+  URL, code→token exchange, userinfo), `auth/oauthState.js` (consume-once
+  state nonce, 10-min TTL), `routes/auth.js` gained `GET /auth/google` +
+  `GET /auth/google/callback`. Owner decisions implemented and tested:
+  **silent auto-link** for existing email/password rows, **`email_verified`
+  gate** (unverified Google emails are rejected, nothing created), **short
+  browser-close session for Google**, NULL-hash logins byte-identical to
+  unknown-email 401s, duplicate-email signup → 409, error bounces to
+  `FRONTEND_ORIGIN` as `?auth_error=<code>`.
+- **Remember me is now real:** `remember:true` (login/signup) → 90-day
+  `Max-Age` + `Expires`; false/omitted → browser-close session cookie.
+  Cookie `HttpOnly; SameSite=Strict` posture unchanged; logout still bumps
+  `session_version`. Tested against the real Set-Cookie header (e2e rm1–rm4).
+- **Frontend:** dark-teal brand pass. `Logo.jsx` (hand-drawn SVG eye +
+  rising candles wordmark, dark/light tones), two-panel `AuthPage.jsx` (dark
+  hero with value props + "Markets move. You see more." / light card with
+  tabs, show-hide password, remember-me, `Forgot password?` placeholder not
+  wired, Google button → `api.googleAuthUrl`), `TickerStrip` dark variant,
+  `app--auth` dark shell, `?auth_error` handled and scrubbed from the URL.
+- **Forgot password = label only (title="Coming soon")**, NOT clickable —
+  no email provider yet. This is the marked wiring point (+ email
+  verification) when email infra lands; do NOT wire a fake reset.
+- **Deploy:** set `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`,
+  `GOOGLE_REDIRECT_URI=https://watchlist-backend-mt3i.onrender.com/auth/google/callback`
+  on Render, create the matching Google Cloud OAuth client, apply migration
+  004 to Neon, redeploy. Until the env is set the route degrades to a clear
+  `provider_not_configured` redirect, never a crash.
+- **Tests:** `googleOAuth.test.js` (23) + `oauth.e2e.test.js` (22, full
+  redirect flow against a fake Google — incl. tests 9/9b pinning the
+  unconfigured-provider degradation and test 10 pinning the consent-cancel
+  path) + remember-me tests rm1–rm4. Full suite: **248 tests, 0 failures.**
+  Frontend production build clean.
 
 ---
 
@@ -896,3 +1038,12 @@ bug or real judging criterion demanded it:
 5. Ack replay protection (server-authoritative timestamp, not client-trusted)
 6. The three-state no-fresh-data distinction (`no_data_yet`/`stale`/`market_closed`)
 7. Demo-mode data being explicitly labeled, never silently presented as live
+8. The auth anti-enumeration contract stays airtight: NULL-hash (Google-only)
+   logins AND unknown emails must stay byte-identical 401s (DUMMY_HASH
+   compare, no timing or body leak), and login rate-limiting stays on.
+9. OAuth `state` coercion stays consume-once and TTL'd (replay → state_mismatch),
+   the `email_verified` gate stays (unverified Google emails create nothing),
+   auto-link stays silent (reuse the same row; never a duplicate account),
+   and Google sessions stay browser-close-short (no remember-me for OAuth).
+10. `Forgot password?` stays a placeholder until a real email provider exists —
+    same rule as demo-mode honesty: never fake a reset flow that doesn't work.

@@ -17,6 +17,7 @@ const pool = require('../db/pool');
 const { createApp } = require('../server');
 const { createMarketDataClient } = require('../marketData/client');
 const { createPoller } = require('../poller/poller');
+const { REMEMBER_ME_MAX_AGE_MS } = require('../routes/session');
 
 let passed = 0, failed = 0;
 function assertTrue(name, condition, detail) {
@@ -325,6 +326,52 @@ async function run() {
       'd4. Watchlist persists across sessions — RELIANCE still there after login',
       restoredBody.items.some((i) => i.symbol === 'RELIANCE'),
       restoredBody
+    );
+
+    // ---- Remember me: a REAL cookie-expiry behavior, not a visual checkbox ----
+    const remTrue = await fetch(`${base}/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: 'alice@example.com', password: 'alice-password-1', remember: true }),
+    });
+    const remTrueHeader = remTrue.headers.get('set-cookie') || '';
+    assertTrue(
+      'rm1. remember=true issues a 90-day cookie — header carries the matched Max-Age + an Expires date',
+      remTrueHeader.includes(`Max-Age=${REMEMBER_ME_MAX_AGE_MS / 1000}`) && remTrueHeader.includes('Expires='),
+      { header: remTrueHeader, maxAge: REMEMBER_ME_MAX_AGE_MS }
+    );
+    const remFalse = await fetch(`${base}/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: 'alice@example.com', password: 'alice-password-1', remember: false }),
+    });
+    const remFalseHeader = remFalse.headers.get('set-cookie') || '';
+    assertTrue(
+      'rm2. remember=false issues a browser-close session cookie (NO Max-Age/Expires in the header)',
+      !remFalseHeader.includes('Max-Age=') && !remFalseHeader.includes('Expires='),
+      remFalseHeader
+    );
+    const remAbsent = await fetch(`${base}/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: 'alice@example.com', password: 'alice-password-1' }),
+    });
+    const remAbsentHeader = remAbsent.headers.get('set-cookie') || '';
+    assertTrue(
+      'rm3. Omitting remember entirely defaults to the short session cookie too',
+      !remAbsentHeader.includes('Max-Age=') && !remAbsentHeader.includes('Expires='),
+      remAbsentHeader
+    );
+    const remSignup = await fetch(`${base}/auth/signup`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: 'remembered@example.com', password: 'remembered-pass-1', remember: true }),
+    });
+    const remSignupHeader = remSignup.headers.get('set-cookie') || '';
+    assertTrue(
+      'rm4. Signup honors remember=true with the same 90-day cookie',
+      remSignupHeader.includes(`Max-Age=${REMEMBER_ME_MAX_AGE_MS / 1000}`),
+      remSignupHeader
     );
 
     // ---- Delete flow (authenticated, with the fresh login cookie) ----

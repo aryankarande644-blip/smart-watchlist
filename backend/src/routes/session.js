@@ -19,7 +19,9 @@ const SAME_SITE = ['strict', 'lax', 'none'].includes(process.env.SESSION_COOKIE_
 // Secure is mandatory for SameSite=None (browsers reject it otherwise);
 // otherwise follow NODE_ENV.
 const IS_SECURE = SAME_SITE === 'none' || process.env.NODE_ENV === 'production';
-const COOKIE_MAX_AGE_MS = 1000 * 60 * 60 * 24 * 365; // 1 year
+// "Remember me" session length (90 days) — see setSessionCookie. The default
+// (no maxAge) is a session cookie that expires when the browser closes.
+const REMEMBER_ME_MAX_AGE_MS = 1000 * 60 * 60 * 24 * 90;
 
 // Cookie payload is `${userId}.${sessionVersion}` — the version is the
 // server-side session state that makes logout real. A cookie issued before a
@@ -59,13 +61,21 @@ function readSession(req) {
 
 // Shared cookie issuance: used by the /auth routes after signup/login so the
 // exact same cookie attributes (and signature scheme) drive every session.
-function setSessionCookie(res, userId, version) {
-  res.cookie(COOKIE_NAME, sign(userId, version), {
+//
+// rememberMe=true -> 90-day cookie ("keep me signed in"). Default (false) ->
+// a session cookie with NO Expires/Max-Age, which the browser drops when the
+// window closes. This is a real behavioral distinction, not cosmetic: the
+// cookie header itself is what differs.
+function setSessionCookie(res, userId, version, { rememberMe = false } = {}) {
+  const options = {
     httpOnly: true,
     sameSite: SAME_SITE,
     secure: IS_SECURE,
-    maxAge: COOKIE_MAX_AGE_MS,
-  });
+  };
+  if (rememberMe === true) {
+    options.maxAge = REMEMBER_ME_MAX_AGE_MS;
+  }
+  res.cookie(COOKIE_NAME, sign(userId, version), options);
 }
 
 // Clearing must mirror the set options, or the browser won't delete it.
@@ -104,4 +114,4 @@ async function sessionMiddleware(req, res, next) {
   }
 }
 
-module.exports = { sessionMiddleware, setSessionCookie, clearSessionCookie, readSession, COOKIE_NAME };
+module.exports = { sessionMiddleware, setSessionCookie, clearSessionCookie, readSession, COOKIE_NAME, REMEMBER_ME_MAX_AGE_MS };
